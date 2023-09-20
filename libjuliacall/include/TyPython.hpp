@@ -269,6 +269,12 @@ PyObject * reasonable_box(JV jv)
         return py;
     }
 
+    if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_Number))
+    {
+        py = pycast2py(jv);
+        return py;
+    }
+
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_AbstractArray))
     {
         // todo

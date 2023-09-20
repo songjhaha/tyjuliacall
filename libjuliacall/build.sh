@@ -5,7 +5,7 @@ if [ -z "$libpython_files" ]; then
 fi
 
 # replace it with your include
-include_dir="C:/Users/TR/AppData/Local/miniforge3/include"
+include_dir="C:/Users/TR/AppData/Local/Programs/Python/Python310/include"
 
 if [ -z "$include_dir" ]; then
     echo "error! python include not set, please set it in build.sh"

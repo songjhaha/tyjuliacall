@@ -50,8 +50,11 @@ struct t_JLAPI
     int64_t t_Bool;
     int64_t t_Complex;
     int64_t t_AbstractArray;
+    int64_t t_AbstractSet;
+    int64_t t_AbstractDict;
     int64_t t_BitArray;
     int64_t t_String;
+    int64_t t_Number;
     int64_t t_Tuple;
 
     JV f_eltype;
@@ -84,11 +87,13 @@ struct t_JLAPI
     JV f_invert;
     JV f_in;
     JV f_hash;
+    JV f_isempty;
 
     JV obj_true;
     JV obj_false;
     JV obj_nothing;
     JV obj_JNumPySupportedNumPyArrayBoxingElementTypes;
+    JV obj_zero;
 };
 
 typedef ErrorCode (*t_pycast2jl)(/* out */ JV* out, JV T, PyObject* py);
@@ -117,11 +122,17 @@ static void init_JLAPI()
     JLEval(&t, NULL, "Complex");
     JLTypeToIdent(&MyJLAPI.t_Complex, t);
     JLEval(&t, NULL, "AbstractArray");
+    JLTypeToIdent(&MyJLAPI.t_AbstractSet,t);
+    JLEval(&t, NULL, "t_AbstractSet");
+    JLTypeToIdent(&MyJLAPI.t_AbstractDict,t);
+    JLEval(&t, NULL, "t_AbstractDict");
     JLTypeToIdent(&MyJLAPI.t_AbstractArray, t);
     JLEval(&t, NULL, "BitArray");
     JLTypeToIdent(&MyJLAPI.t_BitArray, t);
     JLEval(&t, NULL, "String");
     JLTypeToIdent(&MyJLAPI.t_String, t);
+    JLEval(&t, NULL, "Number");
+    JLTypeToIdent(&MyJLAPI.t_Number, t);
     JLEval(&t, NULL, "Tuple");
     JLTypeToIdent(&MyJLAPI.t_Tuple, t);
 
@@ -155,10 +166,13 @@ static void init_JLAPI()
     JLEval(&MyJLAPI.f_invert, NULL, "Base.:~");
     JLEval(&MyJLAPI.f_in, NULL, "Base.in");
     JLEval(&MyJLAPI.f_hash, NULL, "Base.hash");
+    JLEval(&MyJLAPI.f_isempty, NULL, "Base.isempty");
+    
 
     JLEval(&MyJLAPI.obj_true, NULL, "true");
     JLEval(&MyJLAPI.obj_false, NULL, "false");
     JLEval(&MyJLAPI.obj_nothing, NULL, "nothing");
+    JLEval(&MyJLAPI.obj_zero, NULL, "0");
     JLEval(&MyJLAPI.obj_JNumPySupportedNumPyArrayBoxingElementTypes, NULL, "Union{Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64, Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64, Bool}");
 }
 

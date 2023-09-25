@@ -7,6 +7,8 @@
 #include <common.hpp>
 #include <assert.h>
 
+JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree);
+
 static void PyCapsule_Destruct_JuliaAsPython(PyObject *capsule)
 {
     // destruct of capsule(__jlslot__)
@@ -55,6 +57,40 @@ static JV unbox_julia(PyObject *pyjv)
     return *jv;
 }
 
+void free_jv_list(JV *jv_list, bool8_t *jv_list_tobefree, int length)
+{
+    for (int i = 0; i < length; i++)
+    {
+        if (jv_list_tobefree[i])
+            JLFreeFromMe(jv_list[i]);
+    }
+    free(jv_list);
+    free(jv_list_tobefree);
+}
+
+ErrorCode ToJListFromPyTuple(JV *out_list, bool8_t *jv_tobefree, PyObject *py, Py_ssize_t length)
+{
+    bool8_t *ptr_tobefree = jv_tobefree;
+    for (Py_ssize_t i = 0; i < length; i++)
+    {
+        PyObject *element = PyTuple_GetItem(py, i);
+        if (element == NULL)
+            return ErrorCode::error;
+        // 将解包后的元素添加到列表
+        JV unbox_element = reasonable_unbox(element, ptr_tobefree++);
+        if (unbox_element == JV_NULL)
+        {
+            return ErrorCode::error;
+        }
+        else
+        {
+            out_list[i] = unbox_element;
+        }
+    }
+
+    return ErrorCode::ok;
+}
+
 ErrorCode ToJLTupleFromPy(JV *out, PyObject *py)
 {
     // 如果是元组，获取元组的长度
@@ -63,22 +99,13 @@ ErrorCode ToJLTupleFromPy(JV *out, PyObject *py)
     // 创建一个新的列表来存储解包后的元素
     // 如果py是python tuple的话，逐个 unbox 成 arg1, arg2, ..., argN
     // getindex(self, arg1, arg2, ..., argN)
-    JV *jv_args = (JV *)malloc(length);
-    for (Py_ssize_t i = 0; i < length; i++)
-    {
-        PyObject *element = PyTuple_GetItem(py, i);
-        // 将解包后的元素添加到列表
-        // arg_i
-        // TODO: check if unbox fails (v ==  JV_NULL)
-        jv_args[i] = reasonable_unbox(element);
-    }
+    JV *jv_list = (JV *)calloc(length, sizeof(JV));
+    bool8_t *jv_tobefree = (bool8_t *)calloc(length, sizeof(bool8_t));
+    ErrorCode ret = ToJListFromPyTuple(jv_list, jv_tobefree, py, length);
 
-    ErrorCode ret = JLCall(out, MyJLAPI.f_tuple, SList_adapt(jv_args, length), emptyKwArgs());
-    free(jv_args);
-    
-    // TODO: free these JV
+    ret = JLCall(out, MyJLAPI.f_tuple, SList_adapt(jv_list, length), emptyKwArgs());
+    free_jv_list(jv_list, jv_tobefree, length);
     return ret;
-    
 }
 
 ErrorCode TOJLInt64FromPy(JV *out, PyObject *py)
@@ -136,12 +163,13 @@ ErrorCode ToJLComplexFromPy(JV *out, PyObject *py)
 
 ErrorCode ToJLStringFromPy(JV *out, PyObject *py)
 {
-    Py_ssize_t len;
-    const char *str = PyUnicode_AsUTF8AndSize(py, &len);
-    if (str == NULL)
+    // stable api in python 3.7
+    PyObject *pybytes = PyUnicode_AsUTF8String(py);
+    if (pybytes == NULL)
         return ErrorCode::error;
 
-    ToJLString(out, SList_adapt(reinterpret_cast<uint8_t *>(const_cast<char *>(str)), len));
+    char *str = PyBytes_AsString(pybytes);
+    ToJLString(out, SList_adapt(reinterpret_cast<uint8_t *>(str), strlen(str)));
     return ErrorCode::ok;
 }
 
@@ -156,7 +184,7 @@ ErrorCode ToJLNothingFromPy(JV *out, PyObject *py)
     }
 }
 
-JV reasonable_unbox(PyObject *py)
+JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree)
 {
     if (py == Py_None)
         return MyJLAPI.obj_nothing;
@@ -167,36 +195,42 @@ JV reasonable_unbox(PyObject *py)
     JV out;
     if (PyObject_IsInstance(py, MyPyAPI.t_int))
     {
+        *needToBeFree = true;
         TOJLInt64FromPy(&out, py);
         return out;
     }
 
     if (PyObject_IsInstance(py, MyPyAPI.t_float))
     {
+        *needToBeFree = true;
         ToJLFloat64FromPy(&out, py);
         return out;
     }
 
     if (PyObject_IsInstance(py, MyPyAPI.t_str))
     {
+        *needToBeFree = true;
         ToJLStringFromPy(&out, py);
         return out;
     }
 
     if (PyObject_IsInstance(py, MyPyAPI.t_bool))
     {
+        *needToBeFree = true;
         ToJLBoolFromPy(&out, py);
         return out;
     }
 
     if (PyObject_IsInstance(py, MyPyAPI.t_complex))
     {
+        *needToBeFree = true;
         ToJLComplexFromPy(&out, py);
         return out;
     }
 
     if (PyObject_IsInstance(py, MyPyAPI.t_ndarray))
     {
+        *needToBeFree = true;
         ErrorCode ret = pycast2jl(&out, MyJLAPI.t_AbstractArray, py);
         if (ret == ErrorCode::ok)
         {
@@ -205,12 +239,22 @@ JV reasonable_unbox(PyObject *py)
         else
         {
             // todo: string array
+            return out;
         }
     }
 
     // todo: python's tuple
     if (PyObject_IsInstance(py, MyPyAPI.t_tuple))
     {
+        ErrorCode ret = ToJLTupleFromPy(&out, py);
+        if (ret == ErrorCode::ok)
+        {
+            return out;
+        }
+        else
+        {
+            return JV_NULL;
+        }
     }
 
     PyErr_SetString(JuliaCallError, "unbox failed: cannot convert a Python object to Julia object");

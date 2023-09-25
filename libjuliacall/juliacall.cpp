@@ -39,15 +39,27 @@ static PyObject *jl_eval(PyObject *self, PyObject *args)
   {
     return HandleJLErrorAndReturnNULL(); // 如果是错误的话，则处理
   }
-  return box_julia(result);
+  PyObject* pyout = reasonable_box(result);
+  if (!PyObject_IsInstance(pyout, MyPyAPI.t_JV))
+  {
+    // if pyout is a JV object, we should not free it from Julia.
+    JLFreeFromMe(result);
+  }
+  return pyout;
 }
 
 static PyObject *jl_square(PyObject *self, PyObject *args)
 {
-  JV v = reasonable_unbox(args);
+  bool8_t needToBeFree;
+  JV v = reasonable_unbox(args, &needToBeFree);
 
   JV jret;
   ErrorCode ret = JLCall(&jret, MyJLAPI.f_square, SList_adapt(&v, 1), emptyKwArgs());
+  if (needToBeFree)
+  {
+    JLFreeFromMe(v);
+  }
+
   if (ret != ErrorCode::ok)
   {
     return HandleJLErrorAndReturnNULL();
@@ -151,7 +163,8 @@ static PyObject *jl_setattr(PyObject *self, PyObject *args)
     slf = unbox_julia(pyjv);
   }
   // 3. unbox value as JV
-  JV v = reasonable_unbox(value);
+  bool8_t needToBeFree;
+  JV v = reasonable_unbox(value, &needToBeFree);
   if (v == JV_NULL)
   {
     return NULL;
@@ -160,17 +173,19 @@ static PyObject *jl_setattr(PyObject *self, PyObject *args)
   JSym sym;
   JSymFromString(&sym, attr);
   ErrorCode ret = JLSetProperty(slf, sym, v);
+
+  // after Call julia's set property, we should free v if need
+  if (needToBeFree)
+  {
+    JLFreeFromMe(v);
+  }
+
   // 5. check if error occurs, if so, handle it and return NULL
   if (ret != ErrorCode::ok)
   {
     return HandleJLErrorAndReturnNULL();
   }
 
-  if (!PyObject_IsInstance(value, MyPyAPI.t_JV))
-  {
-    // if pyout is a JV object, we should not free it from Julia.
-    JLFreeFromMe(v);
-  }
   // 6. if success, return Py_None
   Py_INCREF(Py_None);
   return Py_None;
@@ -200,26 +215,28 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
   //  使用Python C API时，需要使用 stable API
   if (PyObject_IsInstance(item, MyPyAPI.t_tuple))
   {
-    // 如果是元组，获取元组的长度
-    Py_ssize_t length = PyTuple_Size(item);
+    // 如果是元组，获取元组的长度, length 是 self 加上元组长度
+    Py_ssize_t length = PyTuple_Size(item) + 1;
 
     // 创建一个新的列表来存储解包后的元素
     // python: __getindex__(self, args)
     // 如果args是python tuple的话，逐个 unbox 成 arg1, arg2, ..., argN
     // getindex(self, arg1, arg2, ..., argN)
-    JV *jv_args = (JV *)malloc(length + 1);
-    jv_args[0] = slf;
-    for (Py_ssize_t i = 0; i < length; i++)
+    JV *jv_list = (JV *)calloc(length, sizeof(JV));
+    bool8_t *jv_tobefree = (bool8_t *)calloc(length, sizeof(bool8_t));
+
+    jv_list[0] = slf;
+    // skip the first one, it's self
+    ErrorCode ret = ToJListFromPyTuple((jv_list+1), (jv_tobefree+1), item, length - 1);
+    if (ret != ErrorCode::ok)
     {
-      PyObject *element = PyTuple_GetItem(item, i);
-      // 将解包后的元素添加到列表
-      // arg_i
-      // TODO: check if unbox fails (v ==  JV_NULL)
-      jv_args[i + 1] = reasonable_unbox(element);
+      free_jv_list(jv_list, jv_tobefree, length);
+      return HandleJLErrorAndReturnNULL();
     }
 
     JV jret;
-    ErrorCode ret = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jv_args, length + 1), emptyKwArgs());
+    ret = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jv_list, length + 1), emptyKwArgs());
+    free_jv_list(jv_list, jv_tobefree, length);
     if (ret != ErrorCode::ok)
     {
       return HandleJLErrorAndReturnNULL();
@@ -227,7 +244,7 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
 
     for (Py_ssize_t i = 0; i < length; i++)
     {
-      JV unboxed_element = jv_args[i + 1];
+      JV unboxed_element = jv_list[i + 1];
       // TODO: free unboxed_element if need
     }
 
@@ -237,13 +254,13 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
       // if pyout is a JV object, we should not free it from Julia.
       JLFreeFromMe(jret);
     }
-    free(jv_args);
     return py;
   }
   else
   {
     JV jret;
-    JV v = reasonable_unbox(item);
+    bool8_t needToBeFree;
+    JV v = reasonable_unbox(item, &needToBeFree);
     if (v == JV_NULL)
     {
       return NULL;
@@ -252,14 +269,14 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
     jargs[0] = slf;
     jargs[1] = v;
     ErrorCode ret2 = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jargs, 2), emptyKwArgs());
+    if (needToBeFree)
+    {
+      JLFreeFromMe(v);
+    }
+
     if (ret2 != ErrorCode::ok)
     {
       return HandleJLErrorAndReturnNULL();
-    }
-    if (!PyObject_IsInstance(item, MyPyAPI.t_JV))
-    {
-      // if pyout is a JV object, we should not free it from Julia.
-      JLFreeFromMe(v);
     }
     PyObject *py = reasonable_box(jret);
     if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
@@ -292,7 +309,8 @@ static PyObject *jl_binary_operation(PyObject *self, PyObject *args, JV f)
     slf = unbox_julia(pyjv);
   }
   // 3. unbox value as JV
-  JV v = reasonable_unbox(value);
+  bool8_t needToBeFree;
+  JV v = reasonable_unbox(value, &needToBeFree);
   if (v == JV_NULL)
   {
     return NULL;
@@ -305,16 +323,15 @@ static PyObject *jl_binary_operation(PyObject *self, PyObject *args, JV f)
 
   ErrorCode ret;
   ret = JLCall(&jret, f, SList_adapt(jargs, 2), emptyKwArgs());
+  if (needToBeFree)
+  {
+    JLFreeFromMe(v);
+  }
+
   // 5. check if error occurs, if so, handle it and return NULL
   if (ret != ErrorCode::ok)
   {
     return HandleJLErrorAndReturnNULL();
-  }
-
-  if (!PyObject_IsInstance(value, MyPyAPI.t_JV))
-  {
-    // if pyout is a JV object, we should not free it from Julia.
-    JLFreeFromMe(v);
   }
   PyObject *py = reasonable_box(jret);
   if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
@@ -627,7 +644,7 @@ static PyObject *setup_api(PyObject *self, PyObject *args)
 static PyMethodDef methods[] = {
     {"setup_api", setup_api, METH_VARARGS, "setup JV class and init MyPyAPI/MyJLAPI"},
     {"jl_square", jl_square, METH_O, "Square function"},
-    {"jl_eval", jl_eval, METH_VARARGS, "eval julia function and return a python capsule"},
+    {"evaluate", jl_eval, METH_VARARGS, "eval julia function and return a python capsule"},
     {NULL, NULL, 0, NULL}};
 
 static struct PyModuleDef juliacall_module = {PyModuleDef_HEAD_INIT, "_tyjuliacall_jnumpy",

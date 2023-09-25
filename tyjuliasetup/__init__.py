@@ -188,7 +188,7 @@ class JuliaLoader:
 
 def _jl_using(fullnames: tuple[str, ...]):
     pyjulia_core = _load_pyjulia_core()
-    evaluate = pyjulia_core.jl_eval
+    evaluate = pyjulia_core.evaluate
     Main = evaluate("Main")
 
     M = evaluate("import {0};{0}".format(fullnames[0]))
@@ -359,7 +359,7 @@ def setup():
             with tictoc("setup_jv in {} seconds"):
                 _tyjuliacall_jnumpy.setup_api(jv.JV, jv)
                 # _tyjuliacall_jnumpy.setup_basics(_tyjuliacall_jnumpy)
-                # _tyjuliacall_jnumpy.JV = jv.JV
+                _tyjuliacall_jnumpy.JV = jv.JV
         elif pyjulia_core_provider == "pycall":
             lib.jl_eval_string("import PyCall".encode("utf-8"))
             lib.jl_eval_string("Pkg.activate(io=devnull)".encode("utf-8"))

@@ -357,7 +357,7 @@ def setup():
             from tyjuliasetup import jv
 
             with tictoc("setup_jv in {} seconds"):
-                _tyjuliacall_jnumpy.setup_api(jv.JV)
+                _tyjuliacall_jnumpy.setup_api(jv.JV, jv)
                 # _tyjuliacall_jnumpy.setup_basics(_tyjuliacall_jnumpy)
                 # _tyjuliacall_jnumpy.JV = jv.JV
         elif pyjulia_core_provider == "pycall":

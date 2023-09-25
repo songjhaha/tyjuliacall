@@ -123,11 +123,11 @@ static void init_JLAPI()
     JLTypeToIdent(&MyJLAPI.t_Bool, t);
     JLEval(&t, NULL, "Complex");
     JLTypeToIdent(&MyJLAPI.t_Complex, t);
-    JLEval(&t, NULL, "AbstractArray");
-    JLTypeToIdent(&MyJLAPI.t_AbstractSet,t);
     JLEval(&t, NULL, "AbstractSet");
-    JLTypeToIdent(&MyJLAPI.t_AbstractDict,t);
+    JLTypeToIdent(&MyJLAPI.t_AbstractSet,t);
     JLEval(&t, NULL, "AbstractDict");
+    JLTypeToIdent(&MyJLAPI.t_AbstractDict,t);
+    JLEval(&t, NULL, "AbstractArray");
     JLTypeToIdent(&MyJLAPI.t_AbstractArray, t);
     JLEval(&t, NULL, "BitArray");
     JLTypeToIdent(&MyJLAPI.t_BitArray, t);
@@ -172,7 +172,7 @@ static void init_JLAPI()
     JLEval(&MyJLAPI.f_getindex, NULL, "Base.getindex");
     JLEval(&MyJLAPI.f_tuple, NULL, "Base.tuple");
 
-    
+
 
     JLEval(&MyJLAPI.obj_true, NULL, "true");
     JLEval(&MyJLAPI.obj_false, NULL, "false");

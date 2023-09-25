@@ -88,6 +88,7 @@ struct t_JLAPI
     JV f_in;
     JV f_hash;
     JV f_isempty;
+    JV f_getindex;
 
     JV obj_true;
     JV obj_false;
@@ -167,6 +168,7 @@ static void init_JLAPI()
     JLEval(&MyJLAPI.f_in, NULL, "Base.in");
     JLEval(&MyJLAPI.f_hash, NULL, "Base.hash");
     JLEval(&MyJLAPI.f_isempty, NULL, "Base.isempty");
+    JLEval(&MyJLAPI.f_getindex, NULL, "Base.isempty");
     
 
     JLEval(&MyJLAPI.obj_true, NULL, "true");

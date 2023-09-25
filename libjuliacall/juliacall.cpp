@@ -91,7 +91,7 @@ static PyObject *jl_display(PyObject *self, PyObject *arg)
   return pyjv;
 }
 
-static PyObject *jl_getattr(PyObject *self, PyObject *args)
+static PyObject *jl_getattr1(PyObject *self, PyObject *args)
 {
   PyObject *pyjv;
   const char *attr;
@@ -182,7 +182,7 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
   {
     return NULL;
   }
-  // 2. check pyjv is a JV object, and unbox it as JV
+  // check pyjv is a JV object, and unbox it as JV
   JV slf;
   if (!PyObject_IsInstance(pyjv, MyPyAPI.t_JV))
   {
@@ -193,70 +193,85 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
   {
     slf = unbox_julia(pyjv);
   }
-  if (PyTuple_Check(item))//如果是元组，获取好几个元素
+
+  //如果是元组，获取好几个元素
+  if (PyTuple_Check(item))
   {
     // 如果是元组，获取元组的长度
     Py_ssize_t length = PyTuple_Size(item);
+    if (length == -1) 
+    {
+      PyErr_SetString(PyExc_TypeError, "Failed to get tuple size");
+      return NULL;
+    }
+    
     // 创建一个新的列表来存储解包后的元素
     JV * jv_list = (JV *)malloc(length);
-    
+    for (Py_ssize_t i = 0; i < length; i++)
+    {
+      PyObject* element = PyTuple_GetItem(item, i);
+      JV unboxed_element;
+      unboxed_element = reasonable_unbox(element);
 
-
-
+      // 将解包后的元素添加到结果列表
+      if (unboxed_element != MyJLAPI.t_Nothing)
+      {
+        JV jret;
+        JV jargs[2];
+        jargs[0] = slf;
+        jargs[1] = unboxed_element;
+        ErrorCode ret = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jargs,2), emptyKwArgs());
+        if (ret != ErrorCode::ok)
+        {
+          return HandleJLErrorAndReturnNULL();
+        }
+        jv_list[i] = jret;
+      } else {
+          // 错误处理
+          Py_DECREF(element); // 释放结果列表
+          return NULL;
+      }
+    }
+    JV jret1;
+    ErrorCode ret1 = JLCall(&jret1, MyJLAPI.t_Tuple, SList_adapt(jv_list,length), emptyKwArgs());
+    if (ret1 != ErrorCode::ok)
+    {
+      return HandleJLErrorAndReturnNULL();
+    }
+    PyObject *py = reasonable_box(jret1);
+    if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
+    {
+      // if pyout is a JV object, we should not free it from Julia.
+      JLFreeFromMe(jret1);
+    }
+    return py;
+  }
+  else
+  {
+    JV jret;
+    JV v = reasonable_unbox(item);
+    JV jargs[2];
+    jargs[0] = slf;
+    jargs[1] = v;
+    ErrorCode ret2 = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jargs,2), emptyKwArgs());
+    if (ret2 != ErrorCode::ok)
+    {
+      return HandleJLErrorAndReturnNULL();
+    }
+    if (!PyObject_IsInstance(item, MyPyAPI.t_JV))
+    {
+      // if pyout is a JV object, we should not free it from Julia.
+      JLFreeFromMe(v);
+    }
+    PyObject *py = reasonable_box(jret);
+    if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
+    {
+      // if pyout is a JV object, we should not free it from Julia.
+      JLFreeFromMe(jret);
+    }
+    return py;
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 static PyObject *jl_arithmetic_operation(PyObject *self, PyObject *args, JV f)
@@ -556,8 +571,9 @@ static PyObject *jl_hash(PyObject *self, PyObject *args)
 
 static PyMethodDef jl_methods[] = {
     {"__jl_repr__", jl_display, METH_O, "display JV as string"},
-    {"__jl_getattr__", jl_getattr, METH_VARARGS, "get attr of JV object"},
+    {"__jl_getattr__", jl_getattr1, METH_VARARGS, "get attr of JV object"},
     {"__jl_setattr__", jl_setattr, METH_VARARGS, "set attr of JV object"},
+    {"__jl_getitem__", jl_getitem, METH_VARARGS, "get item of JV object"},
     {"__jl_add__", jl_add, METH_VARARGS, "add function"},
     {"__jl_sub__", jl_sub, METH_VARARGS, "sub function"},
     {"__jl_mul__", jl_mul, METH_VARARGS, "mul function"},

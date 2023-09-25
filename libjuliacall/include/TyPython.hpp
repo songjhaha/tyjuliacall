@@ -9,64 +9,79 @@
 
 static void PyCapsule_Destruct_JuliaAsPython(PyObject *capsule)
 {
-  // destruct of capsule(__jlslot__)
-  JV *jv = (JV *)PyCapsule_GetPointer(capsule, NULL);
-  JLFreeFromMe(*jv);
-  free(jv);
+    // destruct of capsule(__jlslot__)
+    JV *jv = (JV *)PyCapsule_GetPointer(capsule, NULL);
+    JLFreeFromMe(*jv);
+    free(jv);
 }
 
 static PyObject *box_julia(JV jv)
 {
-  // JV(julia value) -> PyObject(python's JV with __jlslot__)
-  if (jv == JV_NULL)
-  {
-    PyErr_SetString(PyExc_RuntimeError, "box_julia: failed to create a new instance of JV");
-    return NULL;
-  }
+    // JV(julia value) -> PyObject(python's JV with __jlslot__)
+    if (jv == JV_NULL)
+    {
+        PyErr_SetString(PyExc_RuntimeError, "box_julia: failed to create a new instance of JV");
+        return NULL;
+    }
 
-  JV *ptr_boxed = (JV *)malloc(sizeof(JV));
-  *ptr_boxed = jv;
+    JV *ptr_boxed = (JV *)malloc(sizeof(JV));
+    *ptr_boxed = jv;
 
-  PyObject *capsule = PyCapsule_New( //把jv对象包装成一个python对象 
-      ptr_boxed,
-      NULL,
-      &PyCapsule_Destruct_JuliaAsPython);
+    PyObject *capsule = PyCapsule_New( // 把jv对象包装成一个python对象
+        ptr_boxed,
+        NULL,
+        &PyCapsule_Destruct_JuliaAsPython);
 
-  PyObject *pyjv = PyObject_CallObject(MyPyAPI.t_JV, NULL);//This is the equivalent of the Python expression:callable(arg1, arg2, ...)
-  if (pyjv == NULL)
-  {
-    PyErr_SetString(PyExc_RuntimeError, "box_julia: failed to create a new instance of JV");
-    return NULL;
-  }
+    PyObject *pyjv = PyObject_CallObject(MyPyAPI.t_JV, NULL); // This is the equivalent of the Python expression:callable(arg1, arg2, ...)
+    if (pyjv == NULL)
+    {
+        PyErr_SetString(PyExc_RuntimeError, "box_julia: failed to create a new instance of JV");
+        return NULL;
+    }
 
-  PyObject_SetAttr(pyjv, name_jlslot, capsule);
-  return pyjv;
+    PyObject_GenericSetAttr(pyjv, name_jlslot, capsule);
+    return pyjv;
 }
 
 static JV unbox_julia(PyObject *pyjv)
 {
-  // assume pyjv is a python's JV instance with __jlslot__
-  //__jlslot__用于定义对象在转换为字符串时的自定义字符串表示。
-  PyObject *capsule = PyObject_GetAttr(pyjv, name_jlslot);
-  //用于在一个 Python 对象 pyjv 上获取一个名为 name_jlslot 的属性,并返回该属性的值
-  JV *jv = (JV *)PyCapsule_GetPointer(capsule, NULL);
-  //函数的作用是从 PyCapsule 对象 capsule 中提取底层的 C 指针，并将其强制类型转换为 (JV *) 类型的指针
-  Py_DecRef(capsule);
-  return *jv;
+    // assume pyjv is a python's JV instance with __jlslot__
+    //__jlslot__用于定义对象在转换为字符串时的自定义字符串表示。
+    PyObject *capsule = PyObject_GetAttr(pyjv, name_jlslot);
+    // 用于在一个 Python 对象 pyjv 上获取一个名为 name_jlslot 的属性,并返回该属性的值
+    JV *jv = (JV *)PyCapsule_GetPointer(capsule, NULL);
+    // 函数的作用是从 PyCapsule 对象 capsule 中提取底层的 C 指针，并将其强制类型转换为 (JV *) 类型的指针
+    Py_DecRef(capsule);
+    return *jv;
 }
 
-// ErrorCode ToJLTupleFromPy(JV *out, PyObject* py)
-// {
-//     Py_ssize_t i = PyLong_AsSsize_t(py);
-//     if (i == -1.0 && PyErr_Occurred() != NULL)
-//         return ErrorCode::error;
+ErrorCode ToJLTupleFromPy(JV *out, PyObject *py)
+{
+    // 如果是元组，获取元组的长度
+    Py_ssize_t length = PyTuple_Size(py);
 
-//     ToJLTuple(out, i);
-//     return ErrorCode::ok;
-// }
+    // 创建一个新的列表来存储解包后的元素
+    // 如果py是python tuple的话，逐个 unbox 成 arg1, arg2, ..., argN
+    // getindex(self, arg1, arg2, ..., argN)
+    JV *jv_args = (JV *)malloc(length);
+    for (Py_ssize_t i = 0; i < length; i++)
+    {
+        PyObject *element = PyTuple_GetItem(py, i);
+        // 将解包后的元素添加到列表
+        // arg_i
+        // TODO: check if unbox fails (v ==  JV_NULL)
+        jv_args[i] = reasonable_unbox(element);
+    }
 
+    ErrorCode ret = JLCall(out, MyJLAPI.f_tuple, SList_adapt(jv_args, length), emptyKwArgs());
+    free(jv_args);
+    
+    // TODO: free these JV
+    return ret;
+    
+}
 
-ErrorCode TOJLInt64FromPy(JV *out, PyObject* py)
+ErrorCode TOJLInt64FromPy(JV *out, PyObject *py)
 {
     Py_ssize_t i = PyLong_AsSsize_t(py);
     if (i == -1 && PyErr_Occurred() != NULL)
@@ -76,7 +91,7 @@ ErrorCode TOJLInt64FromPy(JV *out, PyObject* py)
     return ErrorCode::ok;
 }
 
-ErrorCode ToJLFloat64FromPy(JV *out, PyObject* py)
+ErrorCode ToJLFloat64FromPy(JV *out, PyObject *py)
 {
     double i = PyFloat_AsDouble(py);
     if (i == -1.0 && PyErr_Occurred() != NULL)
@@ -86,7 +101,7 @@ ErrorCode ToJLFloat64FromPy(JV *out, PyObject* py)
     return ErrorCode::ok;
 }
 
-ErrorCode ToJLBoolFromPy(JV *out, PyObject* py)
+ErrorCode ToJLBoolFromPy(JV *out, PyObject *py)
 {
     if (py == Py_True)
     {
@@ -105,24 +120,24 @@ ErrorCode ToJLBoolFromPy(JV *out, PyObject* py)
     return ErrorCode::ok;
 }
 
-ErrorCode ToJLComplexFromPy(JV *out, PyObject* py)
+ErrorCode ToJLComplexFromPy(JV *out, PyObject *py)
 {
-    double re = PyComplex_RealAsDouble(py);//Python 复数对象 py 的实部提取为 re 变量的 double 类型值。
+    double re = PyComplex_RealAsDouble(py); // Python 复数对象 py 的实部提取为 re 变量的 double 类型值。
     if (re == -1.0 && PyErr_Occurred() != NULL)
         return ErrorCode::error;
 
-    double im = PyComplex_ImagAsDouble(py);//Python 复数对象 py 的虚部提取为 im 变量的 double 类型值。
+    double im = PyComplex_ImagAsDouble(py); // Python 复数对象 py 的虚部提取为 im 变量的 double 类型值。
     if (im == -1.0 && PyErr_Occurred() != NULL)
         return ErrorCode::error;
 
-    ToJLComplexF64(out, complex_t{re, im});//如果成功提取了实部和虚部，它将调用 ToJLComplexF64 函数，将这些值组合成 Julia 中的复数对象，并存储在 out 中。
+    ToJLComplexF64(out, complex_t{re, im}); // 如果成功提取了实部和虚部，它将调用 ToJLComplexF64 函数，将这些值组合成 Julia 中的复数对象，并存储在 out 中。
     return ErrorCode::ok;
 }
 
-ErrorCode ToJLStringFromPy(JV *out, PyObject* py)
+ErrorCode ToJLStringFromPy(JV *out, PyObject *py)
 {
     Py_ssize_t len;
-    const char* str = PyUnicode_AsUTF8AndSize(py, &len);
+    const char *str = PyUnicode_AsUTF8AndSize(py, &len);
     if (str == NULL)
         return ErrorCode::error;
 
@@ -130,7 +145,7 @@ ErrorCode ToJLStringFromPy(JV *out, PyObject* py)
     return ErrorCode::ok;
 }
 
-ErrorCode ToJLNothingFromPy(JV *out, PyObject* py)
+ErrorCode ToJLNothingFromPy(JV *out, PyObject *py)
 {
     if (py != Py_None)
         return ErrorCode::error;
@@ -141,7 +156,7 @@ ErrorCode ToJLNothingFromPy(JV *out, PyObject* py)
     }
 }
 
-JV reasonable_unbox(PyObject* py)
+JV reasonable_unbox(PyObject *py)
 {
     if (py == Py_None)
         return MyJLAPI.obj_nothing;
@@ -196,10 +211,7 @@ JV reasonable_unbox(PyObject* py)
     // todo: python's tuple
     if (PyObject_IsInstance(py, MyPyAPI.t_tuple))
     {
-
-
     }
-
 
     PyErr_SetString(JuliaCallError, "unbox failed: cannot convert a Python object to Julia object");
     return JV_NULL;
@@ -248,10 +260,9 @@ JV reasonable_unbox(PyObject* py)
 //     }
 // }
 
-
-PyObject * reasonable_box(JV jv)
+PyObject *reasonable_box(JV jv)
 {
-    PyObject* py;
+    PyObject *py;
 
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_Nothing))
     {
@@ -314,17 +325,7 @@ PyObject * reasonable_box(JV jv)
     // todo: tuple
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_Tuple))
     {
-
-    
-
-
     }
-
-
-
-
-
-    
 
     return box_julia(jv);
 }

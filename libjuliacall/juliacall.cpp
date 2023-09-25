@@ -25,8 +25,6 @@ DLLEXPORT int init_libjuliacall(void *lpfnJLCApiGetter, void *lpfnPyCast2JL, voi
   return 0;
 }
 
-
-
 static PyObject *jl_eval(PyObject *self, PyObject *args)
 {
   const char *_command;
@@ -36,7 +34,7 @@ static PyObject *jl_eval(PyObject *self, PyObject *args)
     return NULL;
   }
   char *command = const_cast<char *>(_command);
-  ErrorCode ret = JLEval(&result, NULL, SList_adapt(reinterpret_cast<uint8_t *>(command), strlen(command))); 
+  ErrorCode ret = JLEval(&result, NULL, SList_adapt(reinterpret_cast<uint8_t *>(command), strlen(command)));
   if (ret != ErrorCode::ok)
   {
     return HandleJLErrorAndReturnNULL(); // 如果是错误的话，则处理
@@ -91,7 +89,7 @@ static PyObject *jl_display(PyObject *self, PyObject *arg)
   return pyjv;
 }
 
-static PyObject *jl_getattr1(PyObject *self, PyObject *args)
+static PyObject *jl_getattr(PyObject *self, PyObject *args)
 {
   PyObject *pyjv;
   const char *attr;
@@ -154,6 +152,10 @@ static PyObject *jl_setattr(PyObject *self, PyObject *args)
   }
   // 3. unbox value as JV
   JV v = reasonable_unbox(value);
+  if (v == JV_NULL)
+  {
+    return NULL;
+  }
   // 4. call JLSetProperty
   JSym sym;
   JSymFromString(&sym, attr);
@@ -194,66 +196,62 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
     slf = unbox_julia(pyjv);
   }
 
-  //如果是元组，获取好几个元素
-  if (PyTuple_Check(item))
+  // 如果是元组，获取好几个元素
+  //  使用Python C API时，需要使用 stable API
+  if (PyObject_IsInstance(item, MyPyAPI.t_tuple))
   {
     // 如果是元组，获取元组的长度
     Py_ssize_t length = PyTuple_Size(item);
-    if (length == -1) 
-    {
-      PyErr_SetString(PyExc_TypeError, "Failed to get tuple size");
-      return NULL;
-    }
-    
+
     // 创建一个新的列表来存储解包后的元素
-    JV * jv_list = (JV *)malloc(length);
+    // python: __getindex__(self, args)
+    // 如果args是python tuple的话，逐个 unbox 成 arg1, arg2, ..., argN
+    // getindex(self, arg1, arg2, ..., argN)
+    JV *jv_args = (JV *)malloc(length + 1);
+    jv_args[0] = slf;
     for (Py_ssize_t i = 0; i < length; i++)
     {
-      PyObject* element = PyTuple_GetItem(item, i);
-      JV unboxed_element;
-      unboxed_element = reasonable_unbox(element);
-
-      // 将解包后的元素添加到结果列表
-      if (unboxed_element != MyJLAPI.t_Nothing)
-      {
-        JV jret;
-        JV jargs[2];
-        jargs[0] = slf;
-        jargs[1] = unboxed_element;
-        ErrorCode ret = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jargs,2), emptyKwArgs());
-        if (ret != ErrorCode::ok)
-        {
-          return HandleJLErrorAndReturnNULL();
-        }
-        jv_list[i] = jret;
-      } else {
-          // 错误处理
-          Py_DECREF(element); // 释放结果列表
-          return NULL;
-      }
+      PyObject *element = PyTuple_GetItem(item, i);
+      // 将解包后的元素添加到列表
+      // arg_i
+      // TODO: check if unbox fails (v ==  JV_NULL)
+      jv_args[i + 1] = reasonable_unbox(element);
     }
-    JV jret1;
-    ErrorCode ret1 = JLCall(&jret1, MyJLAPI.t_Tuple, SList_adapt(jv_list,length), emptyKwArgs());
-    if (ret1 != ErrorCode::ok)
+
+    JV jret;
+    ErrorCode ret = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jv_args, length + 1), emptyKwArgs());
+    if (ret != ErrorCode::ok)
     {
       return HandleJLErrorAndReturnNULL();
     }
-    PyObject *py = reasonable_box(jret1);
+
+    for (Py_ssize_t i = 0; i < length; i++)
+    {
+      JV unboxed_element = jv_args[i + 1];
+      // TODO: free unboxed_element if need
+    }
+
+    PyObject *py = reasonable_box(jret);
     if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
     {
       // if pyout is a JV object, we should not free it from Julia.
-      JLFreeFromMe(jret1);
+      JLFreeFromMe(jret);
     }
+    free(jv_args);
     return py;
   }
   else
   {
     JV jret;
     JV v = reasonable_unbox(item);
+    if (v == JV_NULL)
+    {
+      return NULL;
+    }
     JV jargs[2];
     jargs[0] = slf;
     jargs[1] = v;
-    ErrorCode ret2 = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jargs,2), emptyKwArgs());
+    ErrorCode ret2 = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jargs, 2), emptyKwArgs());
     if (ret2 != ErrorCode::ok)
     {
       return HandleJLErrorAndReturnNULL();
@@ -273,8 +271,7 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
   }
 }
 
-
-static PyObject *jl_arithmetic_operation(PyObject *self, PyObject *args, JV f)
+static PyObject *jl_binary_operation(PyObject *self, PyObject *args, JV f)
 {
   // 1. check args type
   PyObject *pyjv;
@@ -296,6 +293,10 @@ static PyObject *jl_arithmetic_operation(PyObject *self, PyObject *args, JV f)
   }
   // 3. unbox value as JV
   JV v = reasonable_unbox(value);
+  if (v == JV_NULL)
+  {
+    return NULL;
+  }
   // 4. call JLCallS
   JV jret;
   JV jargs[2];
@@ -326,102 +327,102 @@ static PyObject *jl_arithmetic_operation(PyObject *self, PyObject *args, JV f)
 
 static PyObject *jl_add(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_add);
+  return jl_binary_operation(self, args, MyJLAPI.f_add);
 }
 
 static PyObject *jl_sub(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_sub);
+  return jl_binary_operation(self, args, MyJLAPI.f_sub);
 }
 
 static PyObject *jl_mul(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_mul);
+  return jl_binary_operation(self, args, MyJLAPI.f_mul);
 }
 
 static PyObject *jl_matmul(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_matmul);
+  return jl_binary_operation(self, args, MyJLAPI.f_matmul);
 }
 
 static PyObject *jl_truediv(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_truediv);
+  return jl_binary_operation(self, args, MyJLAPI.f_truediv);
 }
 
 static PyObject *jl_floordiv(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_floordiv);
+  return jl_binary_operation(self, args, MyJLAPI.f_floordiv);
 }
 
 static PyObject *jl_mod(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_mod);
+  return jl_binary_operation(self, args, MyJLAPI.f_mod);
 }
 
 static PyObject *jl_pow(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_pow);
+  return jl_binary_operation(self, args, MyJLAPI.f_pow);
 }
 
 static PyObject *jl_lshift(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_lshift);
+  return jl_binary_operation(self, args, MyJLAPI.f_lshift);
 }
 
 static PyObject *jl_rshift(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_rshift);
+  return jl_binary_operation(self, args, MyJLAPI.f_rshift);
 }
 
 static PyObject *jl_bitor(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_bitor);
+  return jl_binary_operation(self, args, MyJLAPI.f_bitor);
 }
 
 static PyObject *jl_bitxor(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_bitxor);
+  return jl_binary_operation(self, args, MyJLAPI.f_bitxor);
 }
 
 static PyObject *jl_bitand(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_bitand);
+  return jl_binary_operation(self, args, MyJLAPI.f_bitand);
 }
 
 static PyObject *jl_eq(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_eq);
+  return jl_binary_operation(self, args, MyJLAPI.f_eq);
 }
 
 static PyObject *jl_ne(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_ne);
+  return jl_binary_operation(self, args, MyJLAPI.f_ne);
 }
 
 static PyObject *jl_lt(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_lt);
+  return jl_binary_operation(self, args, MyJLAPI.f_lt);
 }
 
 static PyObject *jl_le(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_le);
+  return jl_binary_operation(self, args, MyJLAPI.f_le);
 }
 
 static PyObject *jl_gt(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_gt);
+  return jl_binary_operation(self, args, MyJLAPI.f_gt);
 }
 
 static PyObject *jl_ge(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_ge);
+  return jl_binary_operation(self, args, MyJLAPI.f_ge);
 }
 
 static PyObject *jl_contains(PyObject *self, PyObject *args)
 {
-  return jl_arithmetic_operation(self, args, MyJLAPI.f_in);
+  return jl_binary_operation(self, args, MyJLAPI.f_in);
 }
 
 static PyObject *jl_unary_opertation(PyObject *self, PyObject *args, JV f)
@@ -503,7 +504,7 @@ static PyObject *jl_bool(PyObject *self, PyObject *args)
       return HandleJLErrorAndReturnNULL();
     }
     PyObject *py = reasonable_box(jret);
-    JLFreeFromMe(jret); 
+    JLFreeFromMe(jret);
     return py;
   }
   // 3.检查是不是抽象数组 抽象字典 抽象集合 抽象字符串
@@ -553,25 +554,24 @@ static PyObject *jl_hash(PyObject *self, PyObject *args)
     return HandleJLErrorAndReturnNULL();
   }
   ErrorCode ret1;
-  uint64_t result; 
-  ret1 = JLGetUInt64(&result,jret,true);
+  uint64_t result;
+  ret1 = JLGetUInt64(&result, jret, true);
   if (ret1 != ErrorCode::ok)
   {
     return HandleJLErrorAndReturnNULL();
   }
   PyObject *py = PyLong_FromUnsignedLongLong(result);
   if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
-    {
-      // if pyout is a JV object, we should not free it from Julia.
-      JLFreeFromMe(jret);
-    }
-  return py;                   
+  {
+    // if pyout is a JV object, we should not free it from Julia.
+    JLFreeFromMe(jret);
+  }
+  return py;
 }
-
 
 static PyMethodDef jl_methods[] = {
     {"__jl_repr__", jl_display, METH_O, "display JV as string"},
-    {"__jl_getattr__", jl_getattr1, METH_VARARGS, "get attr of JV object"},
+    {"__jl_getattr__", jl_getattr, METH_VARARGS, "get attr of JV object"},
     {"__jl_setattr__", jl_setattr, METH_VARARGS, "set attr of JV object"},
     {"__jl_getitem__", jl_getitem, METH_VARARGS, "get item of JV object"},
     {"__jl_add__", jl_add, METH_VARARGS, "add function"},
@@ -611,7 +611,6 @@ static PyObject *setup_api(PyObject *self, PyObject *args)
   {
     return NULL;
   }
-
 
   if (MyPyAPI.t_JV == NULL)
   {

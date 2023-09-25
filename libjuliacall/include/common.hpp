@@ -89,6 +89,7 @@ struct t_JLAPI
     JV f_hash;
     JV f_isempty;
     JV f_getindex;
+    JV f_tuple;
 
     JV obj_true;
     JV obj_false;
@@ -124,9 +125,9 @@ static void init_JLAPI()
     JLTypeToIdent(&MyJLAPI.t_Complex, t);
     JLEval(&t, NULL, "AbstractArray");
     JLTypeToIdent(&MyJLAPI.t_AbstractSet,t);
-    JLEval(&t, NULL, "t_AbstractSet");
+    JLEval(&t, NULL, "AbstractSet");
     JLTypeToIdent(&MyJLAPI.t_AbstractDict,t);
-    JLEval(&t, NULL, "t_AbstractDict");
+    JLEval(&t, NULL, "AbstractDict");
     JLTypeToIdent(&MyJLAPI.t_AbstractArray, t);
     JLEval(&t, NULL, "BitArray");
     JLTypeToIdent(&MyJLAPI.t_BitArray, t);
@@ -168,7 +169,9 @@ static void init_JLAPI()
     JLEval(&MyJLAPI.f_in, NULL, "Base.in");
     JLEval(&MyJLAPI.f_hash, NULL, "Base.hash");
     JLEval(&MyJLAPI.f_isempty, NULL, "Base.isempty");
-    JLEval(&MyJLAPI.f_getindex, NULL, "Base.isempty");
+    JLEval(&MyJLAPI.f_getindex, NULL, "Base.getindex");
+    JLEval(&MyJLAPI.f_tuple, NULL, "Base.tuple");
+
     
 
     JLEval(&MyJLAPI.obj_true, NULL, "true");

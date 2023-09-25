@@ -45,11 +45,11 @@ class JV:
     def __getattr__(self, name: str):
         return __jl_getattr__(self, name)
 
-    # def __setattr__(self, name: str, value: typing.Any):
-    #     return __jl_setattr__(self, name, value)
+    def __setattr__(self, name: str, value: typing.Any):
+        return __jl_setattr__(self, name, value)
 
-    # def __getitem__(self, key: typing.Any):
-    #     return __jl_getitem__(self, key)
+    def __getitem__(self, key: typing.Any):
+        return __jl_getitem__(self, key)
 
     # def __setitem__(self, key: typing.Any, value: typing.Any):
     #     return __jl_setitem__(self, key, value)

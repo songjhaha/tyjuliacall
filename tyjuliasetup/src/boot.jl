@@ -33,7 +33,7 @@ function pycast2py(v::TyJuliaCAPI.JV)
         return ptr
     catch e
         TyJuliaCAPI.produce_error!(e)
-        return C_NULL
+        return reinterpret(Ptr{TyPython.CPython.PyObject}, C_NULL)
     end
 end
 

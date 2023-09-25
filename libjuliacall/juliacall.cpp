@@ -25,25 +25,7 @@ DLLEXPORT int init_libjuliacall(void *lpfnJLCApiGetter, void *lpfnPyCast2JL, voi
   return 0;
 }
 
-static PyObject *setup_api(PyObject *self, PyObject *arg)
-{
-  // check arg type
-  if (!PyType_Check(arg))
-  {
-    PyErr_SetString(PyExc_TypeError, "setup_api: arg must be a type");
-    return NULL;
-  }
 
-  if (MyPyAPI.t_JV == NULL)
-  {
-    Py_IncRef(arg); // Py_IncRef 函数用于增加 Python 对象的引用计数。
-    init_JLAPI();
-    init_PyAPI(arg); // 自定义函数或库初始化函数的调用。
-  }
-
-  Py_INCREF(Py_None);
-  return Py_None;
-}
 
 static PyObject *jl_eval(PyObject *self, PyObject *args)
 {
@@ -191,6 +173,91 @@ static PyObject *jl_setattr(PyObject *self, PyObject *args)
   Py_INCREF(Py_None);
   return Py_None;
 }
+
+static PyObject *jl_getitem(PyObject *self, PyObject *args)
+{
+  PyObject *pyjv;
+  PyObject *item;
+  if (!PyArg_ParseTuple(args, "OO", &pyjv, &item))
+  {
+    return NULL;
+  }
+  // 2. check pyjv is a JV object, and unbox it as JV
+  JV slf;
+  if (!PyObject_IsInstance(pyjv, MyPyAPI.t_JV))
+  {
+    PyErr_SetString(JuliaCallError, "jl_getitem: expect object of JV class.");
+    return NULL;
+  }
+  else
+  {
+    slf = unbox_julia(pyjv);
+  }
+  if (PyTuple_Check(item))//如果是元组，获取好几个元素
+  {
+    // 如果是元组，获取元组的长度
+    Py_ssize_t length = PyTuple_Size(item);
+    // 创建一个新的列表来存储解包后的元素
+    JV * jv_list = (JV *)malloc(length);
+    
+
+
+
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 static PyObject *jl_arithmetic_operation(PyObject *self, PyObject *args, JV f)
 {
@@ -486,39 +553,66 @@ static PyObject *jl_hash(PyObject *self, PyObject *args)
   return py;                   
 }
 
+
+static PyMethodDef jl_methods[] = {
+    {"__jl_repr__", jl_display, METH_O, "display JV as string"},
+    {"__jl_getattr__", jl_getattr, METH_VARARGS, "get attr of JV object"},
+    {"__jl_setattr__", jl_setattr, METH_VARARGS, "set attr of JV object"},
+    {"__jl_add__", jl_add, METH_VARARGS, "add function"},
+    {"__jl_sub__", jl_sub, METH_VARARGS, "sub function"},
+    {"__jl_mul__", jl_mul, METH_VARARGS, "mul function"},
+    {"__jl_matmul__", jl_matmul, METH_VARARGS, "matmul function"},
+    {"__jl_truediv__", jl_truediv, METH_VARARGS, "truediv function"},
+    {"__jl_floordiv__", jl_floordiv, METH_VARARGS, "floordiv function"},
+    {"__jl_mod__", jl_mod, METH_VARARGS, "mod function"},
+    {"__jl_pow__", jl_pow, METH_VARARGS, "pow function"},
+    {"__jl_lshift__", jl_lshift, METH_VARARGS, "lshift function"},
+    {"__jl_rshift__", jl_rshift, METH_VARARGS, "rshift function"},
+    {"__jl_bitor__", jl_bitor, METH_VARARGS, "bitor function"},
+    {"__jl_bitxor__", jl_bitxor, METH_VARARGS, "bitxor function"},
+    {"__jl_bitand__", jl_bitand, METH_VARARGS, "bitand function"},
+    {"__jl_eq__", jl_eq, METH_VARARGS, "eq function"},
+    {"__jl_ne__", jl_ne, METH_VARARGS, "ne function"},
+    {"__jl_lt__", jl_lt, METH_VARARGS, "lt function"},
+    {"__jl_le__", jl_le, METH_VARARGS, "le function"},
+    {"__jl_gt__", jl_gt, METH_VARARGS, "gt function"},
+    {"__jl_ge__", jl_ge, METH_VARARGS, "ge function"},
+    {"__jl_contains__", jl_contains, METH_VARARGS, "contains function"},
+    {"__jl_invert__", jl_invert, METH_O, "invert function"},
+    {"__jl_pos__", jl_pos, METH_O, "pos function"},
+    {"__jl_neg__", jl_neg, METH_O, "neg function"},
+    {"__jl_abs__", jl_abs, METH_O, "abs function"},
+    {"__jl_bool__", jl_bool, METH_O, "bool function"},
+    {"__jl_hash__", jl_hash, METH_O, "hash function"},
+    {NULL, NULL, 0, NULL}};
+
+static PyObject *setup_api(PyObject *self, PyObject *args)
+{
+  // check arg type
+  PyObject *cls_jv;
+  PyObject *m_jv;
+  if (!PyArg_ParseTuple(args, "OO", &cls_jv, &m_jv))
+  {
+    return NULL;
+  }
+
+
+  if (MyPyAPI.t_JV == NULL)
+  {
+    Py_IncRef(cls_jv); // Py_IncRef 函数用于增加 Python 对象的引用计数。
+    init_JLAPI();
+    init_PyAPI(cls_jv); // 自定义函数或库初始化函数的调用。
+    PyModule_AddFunctions(m_jv, jl_methods);
+  }
+
+  Py_INCREF(Py_None);
+  return Py_None;
+}
+
 static PyMethodDef methods[] = {
-    {"setup_api", setup_api, METH_O, "setup JV class and init MyPyAPI/MyJLAPI"},
+    {"setup_api", setup_api, METH_VARARGS, "setup JV class and init MyPyAPI/MyJLAPI"},
     {"jl_square", jl_square, METH_O, "Square function"},
     {"jl_eval", jl_eval, METH_VARARGS, "eval julia function and return a python capsule"},
-    {"jl_display", jl_display, METH_O, "display JV as string"},
-    {"jl_getattr", jl_getattr, METH_VARARGS, "get attr of JV object"},
-    {"jl_setattr", jl_setattr, METH_VARARGS, "set attr of JV object"},
-    {"jl_add", jl_add, METH_VARARGS, "add function"},
-    {"jl_sub", jl_sub, METH_VARARGS, "sub function"},
-    {"jl_mul", jl_mul, METH_VARARGS, "mul function"},
-    {"jl_matmul", jl_matmul, METH_VARARGS, "matmul function"},
-    {"jl_truediv", jl_truediv, METH_VARARGS, "truediv function"},
-    {"jl_floordiv", jl_floordiv, METH_VARARGS, "floordiv function"},
-    {"jl_mod", jl_mod, METH_VARARGS, "mod function"},
-    {"jl_pow", jl_pow, METH_VARARGS, "pow function"},
-    {"jl_lshift", jl_lshift, METH_VARARGS, "lshift function"},
-    {"jl_rshift", jl_rshift, METH_VARARGS, "rshift function"},
-    {"jl_bitor", jl_bitor, METH_VARARGS, "bitor function"},
-    {"jl_bitxor", jl_bitxor, METH_VARARGS, "bitxor function"},
-    {"jl_bitand", jl_bitand, METH_VARARGS, "bitand function"},
-    {"jl_eq", jl_eq, METH_VARARGS, "eq function"},
-    {"jl_ne", jl_ne, METH_VARARGS, "ne function"},
-    {"jl_lt", jl_lt, METH_VARARGS, "lt function"},
-    {"jl_le", jl_le, METH_VARARGS, "le function"},
-    {"jl_gt", jl_gt, METH_VARARGS, "gt function"},
-    {"jl_ge", jl_ge, METH_VARARGS, "ge function"},
-    {"jl_contains", jl_contains, METH_VARARGS, "contains function"},
-    {"jl_invert", jl_invert, METH_O, "invert function"},
-    {"jl_pos", jl_pos, METH_O, "pos function"},
-    {"jl_neg", jl_neg, METH_O, "neg function"},
-    {"jl_abs", jl_abs, METH_O, "abs function"},
-    {"jl_bool", jl_bool, METH_O, "bool function"},
-    {"jl_hash", jl_hash, METH_O, "hash function"},
     {NULL, NULL, 0, NULL}};
 
 static struct PyModuleDef juliacall_module = {PyModuleDef_HEAD_INIT, "_tyjuliacall_jnumpy",

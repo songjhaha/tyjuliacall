@@ -280,6 +280,7 @@ using TyPython: C
 #     if is_type_exact(item, MyPyAPI.tuple)
 #         reasonable_box(
 #             getindex(unbox_julia(self), reasonable_unbox(item)...))
+#            (函数本身的unbox)
 #     else
 #         reasonable_box(
 #             getindex(unbox_julia(self), reasonable_unbox(item)))

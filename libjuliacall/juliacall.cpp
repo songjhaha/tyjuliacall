@@ -5,6 +5,7 @@
 #include <common.hpp>
 #include <assert.h>
 #include <time.h>
+#include <stdlib.h>
 
 DLLEXPORT int init_libjuliacall(void *lpfnJLCApiGetter, void *lpfnPyCast2JL, void *lpfnPyCast2Py)
 {
@@ -132,8 +133,6 @@ static PyObject *jl_call(PyObject *self, PyObject *args)
     return NULL;
   }
 
-  printf("here");
-
   Py_ssize_t nargs = PyTuple_Size(posargs);
   Py_ssize_t nkargs = PyDict_Size(kwargs);
 
@@ -145,9 +144,6 @@ static PyObject *jl_call(PyObject *self, PyObject *args)
     free_jv_list(jlargs, jv_tobefree, nargs);
     return HandleJLErrorAndReturnNULL();
   }
-
-  printf("here2");
-  printf("nargs: %d, nkargs: %d", nargs, nkargs);
 
   JSym *jv_key_list = (JSym *)calloc(nkargs, sizeof(JSym));
   JV *jv_value_list = (JV *)calloc(nkargs, sizeof(JV));
@@ -167,19 +163,17 @@ static PyObject *jl_call(PyObject *self, PyObject *args)
     // handle unbox fails case
     if (v == JV_NULL)
     {
+      free(jv_key_list);
       free_jv_list(jlargs, jv_tobefree, nargs);
       free_jv_list(jv_value_list, jv_value_tobefree, nkargs);
-      return NULL;
+      return HandleJLErrorAndReturnNULL();
     }
     jv_value_list[count] = v;
     count++;
   }
 
-  printf("here3");
-
-
   STuple<JSym, JV> *jlkwargs = (STuple<JSym, JV> *)malloc(nkargs * sizeof(STuple<JSym, JV>));
-  for (Py_ssize_t i = 0; i < nargs; i++)
+  for (Py_ssize_t i = 0; i < nkargs; i++)
   {
     jlkwargs[i] = STuple<JSym, JV> {jv_key_list[i], jv_value_list[i]};
   }
@@ -188,9 +182,9 @@ static PyObject *jl_call(PyObject *self, PyObject *args)
   JV out;
   ret = JLCall(&out, slf, SList_adapt(jlargs, nargs), SList_adapt(jlkwargs, nkargs));
 
-  printf("here4");
   if (ret != ErrorCode::ok)
   {
+    free(jv_key_list);
     free_jv_list(jlargs, jv_tobefree, nargs);
     free_jv_list(jv_value_list, jv_value_tobefree, nkargs);
     free(jlkwargs);
@@ -204,6 +198,7 @@ static PyObject *jl_call(PyObject *self, PyObject *args)
     JLFreeFromMe(out);
   }
 
+  free(jv_key_list);
   free_jv_list(jlargs, jv_tobefree, nargs);
   free_jv_list(jv_value_list, jv_value_tobefree, nkargs);
   free(jlkwargs);
@@ -366,7 +361,7 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
     JV v = reasonable_unbox(item, &needToBeFree);
     if (v == JV_NULL)
     {
-      return NULL;
+      return HandleJLErrorAndReturnNULL();
     }
     JV jargs[2];
     jargs[0] = slf;
@@ -414,8 +409,14 @@ static PyObject *jl_setitem(PyObject *self, PyObject *args)
     JV *jv_list = (JV *)calloc(length, sizeof(JV));
     bool8_t *jv_tobefree = (bool8_t *)calloc(length, sizeof(bool8_t));
 
-    bool8_t needToBeFree;
+    bool8_t needToBeFree = false;
     JV v = reasonable_unbox(val, &needToBeFree);
+    jv_tobefree[1] = needToBeFree;
+    if (v == JV_NULL)
+    {
+      free_jv_list(jv_list, jv_tobefree, length);
+      return HandleJLErrorAndReturnNULL();
+    }
     jv_list[0] = slf;
     jv_list[1] = v;
     ErrorCode ret = ToJListFromPyTuple((jv_list + 2), (jv_tobefree + 2), item, length - 2);
@@ -444,26 +445,34 @@ static PyObject *jl_setitem(PyObject *self, PyObject *args)
   else
   {
     JV jret;
-    bool8_t needToBeFree;
-    JV v = reasonable_unbox(val, &needToBeFree);
+    bool8_t needToBeFree_val;
+    bool8_t needToBeFree_item;
+    JV v = reasonable_unbox(val, &needToBeFree_val);
     if (v == JV_NULL)
     {
-      return NULL;
+      return HandleJLErrorAndReturnNULL();
     }
-    JV itm = reasonable_unbox(item, &needToBeFree);
-    if (itm == JV_NULL)
+    JV j_itme = reasonable_unbox(item, &needToBeFree_item);
+    if (j_itme == JV_NULL)
     {
-      return NULL;
+      if (needToBeFree_val)
+      {
+        JLFreeFromMe(v);
+      }
+      return HandleJLErrorAndReturnNULL();
     }
     JV jargs[3];
     jargs[0] = slf;
     jargs[1] = v;
-    jargs[2] = itm;
+    jargs[2] = j_itme;
     ErrorCode ret2 = JLCall(&jret, MyJLAPI.f_setindex, SList_adapt(jargs, 3), emptyKwArgs());
-    if (needToBeFree)
+    if (needToBeFree_val)
     {
       JLFreeFromMe(v);
-      JLFreeFromMe(itm);
+    }
+    if (needToBeFree_item)
+    {
+      JLFreeFromMe(j_itme);
     }
 
     if (ret2 != ErrorCode::ok)

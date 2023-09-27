@@ -6,6 +6,7 @@
 #include <tyjuliacapi.hpp>
 #include <common.hpp>
 #include <assert.h>
+#include <stdlib.h>
 
 JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree);
 
@@ -62,7 +63,9 @@ void free_jv_list(JV *jv_list, bool8_t *jv_list_tobefree, int length)
     for (int i = 0; i < length; i++)
     {
         if (jv_list_tobefree[i])
+        {
             JLFreeFromMe(jv_list[i]);
+        }
     }
     free(jv_list);
     free(jv_list_tobefree);

@@ -391,6 +391,97 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
   }
 }
 
+static PyObject *jl_setitem(PyObject *self, PyObject *args)
+{
+  PyObject *pyjv, *item, *val;
+  JV slf;
+  if (!PyArg_ParseTuple(args, "OOO", &pyjv, &item, &val))
+  {
+    return NULL;
+  }
+  if (!PyObject_IsInstance(pyjv, MyPyAPI.t_JV))
+  {
+    PyErr_SetString(JuliaCallError, "jl_setitem: expect object of JV class.");
+    return NULL;
+  }
+  else
+  {
+    slf = unbox_julia(pyjv);
+  }
+  if (PyObject_IsInstance(item, MyPyAPI.t_tuple))
+  {
+    Py_ssize_t length = PyTuple_Size(item) + 2;
+    JV *jv_list = (JV *)calloc(length, sizeof(JV));
+    bool8_t *jv_tobefree = (bool8_t *)calloc(length, sizeof(bool8_t));
+
+    bool8_t needToBeFree;
+    JV v = reasonable_unbox(val, &needToBeFree);
+    jv_list[0] = slf;
+    jv_list[1] = v;
+    ErrorCode ret = ToJListFromPyTuple((jv_list + 2), (jv_tobefree + 2), item, length - 2);
+    if (ret != ErrorCode::ok)
+    {
+      free_jv_list(jv_list, jv_tobefree, length);
+      return HandleJLErrorAndReturnNULL();
+    }
+
+    JV jret;
+    ret = JLCall(&jret, MyJLAPI.f_setindex, SList_adapt(jv_list, length), emptyKwArgs());
+    free_jv_list(jv_list, jv_tobefree, length);
+    if (ret != ErrorCode::ok)
+    {
+      return HandleJLErrorAndReturnNULL();
+    }
+
+    PyObject *py = reasonable_box(jret);
+    if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
+    {
+      // if pyout is a JV object, we should not free it from Julia.
+      JLFreeFromMe(jret);
+    }
+    return py;
+  }
+  else
+  {
+    JV jret;
+    bool8_t needToBeFree;
+    JV v = reasonable_unbox(val, &needToBeFree);
+    if (v == JV_NULL)
+    {
+      return NULL;
+    }
+    JV itm = reasonable_unbox(item, &needToBeFree);
+    if (itm == JV_NULL)
+    {
+      return NULL;
+    }
+    JV jargs[3];
+    jargs[0] = slf;
+    jargs[1] = v;
+    jargs[2] = itm;
+    ErrorCode ret2 = JLCall(&jret, MyJLAPI.f_setindex, SList_adapt(jargs, 3), emptyKwArgs());
+    if (needToBeFree)
+    {
+      JLFreeFromMe(v);
+      JLFreeFromMe(itm);
+    }
+
+    if (ret2 != ErrorCode::ok)
+    {
+      return HandleJLErrorAndReturnNULL();
+    }
+    PyObject *py = reasonable_box(jret);
+    if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
+    {
+      // if pyout is a JV object, we should not free it from Julia.
+      JLFreeFromMe(jret);
+    }
+    return py;
+  }
+  Py_INCREF(Py_None);
+  return Py_None;
+}
+
 static PyObject *jl_binary_operation(PyObject *self, PyObject *args, JV f)
 {
   // 1. check args type

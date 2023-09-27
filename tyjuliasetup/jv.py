@@ -39,8 +39,8 @@ _jl_repr_pretty_: typing.Callable[[JV], str]
 class JV:
     __slots__ = ["__jlslot__"]
 
-    # def __call__(self, *args, **kwargs):
-    #     return __jl_invoke__(self, args, kwargs)
+    def __call__(self, *args, **kwargs):
+        return __jl_invoke__(self, args, kwargs)
 
     def __getattr__(self, name: str):
         return __jl_getattr__(self, name)

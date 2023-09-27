@@ -77,7 +77,7 @@ ErrorCode ToJListFromPyTuple(JV *out_list, bool8_t *jv_tobefree, PyObject *py, P
         if (element == NULL)
             return ErrorCode::error;
         // 将解包后的元素添加到列表
-        JV unbox_element = reasonable_unbox(element, ptr_tobefree++);
+        JV unbox_element = reasonable_unbox(element, ptr_tobefree);
         if (unbox_element == JV_NULL)
         {
             return ErrorCode::error;
@@ -86,6 +86,7 @@ ErrorCode ToJListFromPyTuple(JV *out_list, bool8_t *jv_tobefree, PyObject *py, P
         {
             out_list[i] = unbox_element;
         }
+        ptr_tobefree++;
     }
 
     return ErrorCode::ok;
@@ -106,6 +107,17 @@ ErrorCode ToJLTupleFromPy(JV *out, PyObject *py)
     ret = JLCall(out, MyJLAPI.f_tuple, SList_adapt(jv_list, length), emptyKwArgs());
     free_jv_list(jv_list, jv_tobefree, length);
     return ret;
+}
+
+ErrorCode ToJLSymFromPyStr(JSym *out, PyObject *py)
+{
+    PyObject *pybytes = PyUnicode_AsUTF8String(py);
+    if (pybytes == NULL)
+        return ErrorCode::error;
+
+    char *str = PyBytes_AsString(pybytes);
+    JSymFromString(out, SList_adapt(reinterpret_cast<uint8_t *>(str), strlen(str)));
+    return ErrorCode::ok;
 }
 
 ErrorCode TOJLInt64FromPy(JV *out, PyObject *py)

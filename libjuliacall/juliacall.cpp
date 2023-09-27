@@ -39,7 +39,7 @@ static PyObject *jl_eval(PyObject *self, PyObject *args)
   {
     return HandleJLErrorAndReturnNULL(); // 如果是错误的话，则处理
   }
-  PyObject* pyout = reasonable_box(result);
+  PyObject *pyout = reasonable_box(result);
   if (!PyObject_IsInstance(pyout, MyPyAPI.t_JV))
   {
     // if pyout is a JV object, we should not free it from Julia.
@@ -99,6 +99,115 @@ static PyObject *jl_display(PyObject *self, PyObject *arg)
   // free this Julia String
   JLFreeFromMe(jret);
   return pyjv;
+}
+
+static PyObject *jl_call(PyObject *self, PyObject *args)
+{
+  PyObject *pyjv, *posargs, *kwargs;
+  JV slf;
+  if (!PyArg_ParseTuple(args, "OOO", &pyjv, &posargs, &kwargs))
+  {
+    return NULL;
+  }
+
+  if (!PyObject_IsInstance(pyjv, MyPyAPI.t_JV))
+  {
+    PyErr_SetString(JuliaCallError, "jl_call: expect object of JV class.");
+    return NULL;
+  }
+  else
+  {
+    slf = unbox_julia(pyjv);
+  }
+
+  if (!PyObject_IsInstance(posargs, MyPyAPI.t_tuple))
+  {
+    PyErr_SetString(JuliaCallError, "args must be a tuple.");
+    return NULL;
+  }
+
+  if (!PyObject_IsInstance(kwargs, MyPyAPI.t_dict))
+  {
+    PyErr_SetString(JuliaCallError, "kwargs must be a dict.");
+    return NULL;
+  }
+
+  printf("here");
+
+  Py_ssize_t nargs = PyTuple_Size(posargs);
+  Py_ssize_t nkargs = PyDict_Size(kwargs);
+
+  JV *jlargs = (JV *)calloc(nargs, sizeof(JV));
+  bool8_t *jv_tobefree = (bool8_t *)calloc(nargs, sizeof(bool8_t));
+  ErrorCode ret = ToJListFromPyTuple(jlargs, jv_tobefree, posargs, nargs);
+  if (ret != ErrorCode::ok)
+  {
+    free_jv_list(jlargs, jv_tobefree, nargs);
+    return HandleJLErrorAndReturnNULL();
+  }
+
+  printf("here2");
+  printf("nargs: %d, nkargs: %d", nargs, nkargs);
+
+  JSym *jv_key_list = (JSym *)calloc(nkargs, sizeof(JSym));
+  JV *jv_value_list = (JV *)calloc(nkargs, sizeof(JV));
+  bool8_t *jv_value_tobefree = (bool8_t *)calloc(nkargs, sizeof(bool8_t));
+
+  PyObject *key, *value;
+  Py_ssize_t pos = 0;
+  int count = 0;
+
+  while (PyDict_Next(kwargs, &pos, &key, &value))
+  {
+    JSym sym;
+    ToJLSymFromPyStr(&sym, key);
+    jv_key_list[count] = sym;
+    JV v = reasonable_unbox(value, (jv_value_tobefree + count));
+
+    // handle unbox fails case
+    if (v == JV_NULL)
+    {
+      free_jv_list(jlargs, jv_tobefree, nargs);
+      free_jv_list(jv_value_list, jv_value_tobefree, nkargs);
+      return NULL;
+    }
+    jv_value_list[count] = v;
+    count++;
+  }
+
+  printf("here3");
+
+
+  STuple<JSym, JV> *jlkwargs = (STuple<JSym, JV> *)malloc(nkargs * sizeof(STuple<JSym, JV>));
+  for (Py_ssize_t i = 0; i < nargs; i++)
+  {
+    jlkwargs[i] = STuple<JSym, JV> {jv_key_list[i], jv_value_list[i]};
+  }
+
+
+  JV out;
+  ret = JLCall(&out, slf, SList_adapt(jlargs, nargs), SList_adapt(jlkwargs, nkargs));
+
+  printf("here4");
+  if (ret != ErrorCode::ok)
+  {
+    free_jv_list(jlargs, jv_tobefree, nargs);
+    free_jv_list(jv_value_list, jv_value_tobefree, nkargs);
+    free(jlkwargs);
+    return HandleJLErrorAndReturnNULL();
+  }
+
+  PyObject *pyout = reasonable_box(out);
+  if (!PyObject_IsInstance(pyout, MyPyAPI.t_JV))
+  {
+    // if pyout is a JV object, we should not free it from Julia.
+    JLFreeFromMe(out);
+  }
+
+  free_jv_list(jlargs, jv_tobefree, nargs);
+  free_jv_list(jv_value_list, jv_value_tobefree, nkargs);
+  free(jlkwargs);
+  return pyout;
 }
 
 static PyObject *jl_getattr(PyObject *self, PyObject *args)
@@ -227,7 +336,7 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
 
     jv_list[0] = slf;
     // skip the first one, it's self
-    ErrorCode ret = ToJListFromPyTuple((jv_list+1), (jv_tobefree+1), item, length - 1);
+    ErrorCode ret = ToJListFromPyTuple((jv_list + 1), (jv_tobefree + 1), item, length - 1);
     if (ret != ErrorCode::ok)
     {
       free_jv_list(jv_list, jv_tobefree, length);
@@ -235,17 +344,11 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
     }
 
     JV jret;
-    ret = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jv_list, length + 1), emptyKwArgs());
+    ret = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jv_list, length), emptyKwArgs());
     free_jv_list(jv_list, jv_tobefree, length);
     if (ret != ErrorCode::ok)
     {
       return HandleJLErrorAndReturnNULL();
-    }
-
-    for (Py_ssize_t i = 0; i < length; i++)
-    {
-      JV unboxed_element = jv_list[i + 1];
-      // TODO: free unboxed_element if need
     }
 
     PyObject *py = reasonable_box(jret);
@@ -587,6 +690,7 @@ static PyObject *jl_hash(PyObject *self, PyObject *args)
 }
 
 static PyMethodDef jl_methods[] = {
+    {"__jl_invoke__", jl_call, METH_VARARGS, "call JV as callable object"},
     {"__jl_repr__", jl_display, METH_O, "display JV as string"},
     {"__jl_getattr__", jl_getattr, METH_VARARGS, "get attr of JV object"},
     {"__jl_setattr__", jl_setattr, METH_VARARGS, "set attr of JV object"},

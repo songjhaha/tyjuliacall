@@ -11,6 +11,7 @@ static JSym errorSym;
 
 PyObject* HandleJLErrorAndReturnNULL()
 {
+    // 动态分配 error msg
     char errorBytes[2048] = {(char)0};
     if (ErrorCode::ok == JLError_FetchMsgStr(&errorSym, SList_adapt(reinterpret_cast<uint8_t *>(errorBytes), sizeof(errorBytes))))
     {

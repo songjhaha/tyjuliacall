@@ -404,10 +404,14 @@ PyObject *reasonable_box(JV jv)
             return HandleJLErrorAndReturnNULL();
             }
             PyObject *arg = reasonable_box(v);
-            JLFreeFromMe(v);
+            if (!PyObject_IsInstance(arg, MyPyAPI.t_JV))
+            {
+                JLFreeFromMe(v);
+            }
             Py_INCREF(arg);
             PyTuple_SetItem(argtuple, i, arg);
         }
+        JLFreeFromMe(N);
         return argtuple;
     }
     return box_julia(jv);

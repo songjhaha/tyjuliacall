@@ -8,6 +8,10 @@
 #include <assert.h>
 #include <stdlib.h>
 
+// todo: attr_name_to_symbol(s::String)::Symbol
+// todo: is_type_exact(x::Py, t::Py)::Bool
+
+
 JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree);
 
 static void PyCapsule_Destruct_JuliaAsPython(PyObject *capsule)
@@ -384,8 +388,28 @@ PyObject *reasonable_box(JV jv)
     // todo: tuple
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_Tuple))
     {
-    }
+        JV N;
+        ErrorCode ret = JLCall(&N, MyJLAPI.f_length, SList_adapt(&jv, 1), emptyKwArgs());
+        if (ret != ErrorCode::ok)
+        {
+            return HandleJLErrorAndReturnNULL();
+        }
+        PyObject *argtuple = PyTuple_New(N);
 
+        for (int i = 0; i < N; i++) {
+            JV v;
+            ErrorCode ret1 = JLGetIndexI(&v,jv,i);
+            if (ret != ErrorCode::ok)
+            {
+            return HandleJLErrorAndReturnNULL();
+            }
+            PyObject *arg = reasonable_box(v);
+            JLFreeFromMe(v);
+            Py_INCREF(arg);
+            PyTuple_SetItem(argtuple, i, arg);
+        }
+        return argtuple;
+    }
     return box_julia(jv);
 }
 

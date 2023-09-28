@@ -174,6 +174,7 @@ static void init_JLAPI()
     JLEval(&MyJLAPI.f_getindex, NULL, "Base.getindex");
     JLEval(&MyJLAPI.f_setindex, NULL, "Base.setindex");
     JLEval(&MyJLAPI.f_tuple, NULL, "Base.tuple");
+    JLEval(&MyJLAPI.f_length, NULL, "Base.length");
 
 
 

@@ -395,14 +395,9 @@ PyObject *reasonable_box(JV jv)
         int64_t N;
         JLGetInt64(&N,jv_N, true);
         JLFreeFromMe(jv_N);
-        ErrorCode ret = JLCall(&N, MyJLAPI.f_length, SList_adapt(&jv, 1), emptyKwArgs());
-        if (ret != ErrorCode::ok)
-        {
-            return HandleJLErrorAndReturnNULL();
-        }
         PyObject *argtuple = PyTuple_New(N);
 
-        for (int i = 0; i < N; i++) 
+        for (int64_t i = 0; i < N; i++) 
         {
             JV v;
             ErrorCode ret1 = JLGetIndexI(&v,jv,i+1);
@@ -418,7 +413,6 @@ PyObject *reasonable_box(JV jv)
             Py_INCREF(arg);
             PyTuple_SetItem(argtuple, i, arg);
         }
-        JLFreeFromMe(N);
         return argtuple;
     }
     return box_julia(jv);

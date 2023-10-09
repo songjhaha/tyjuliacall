@@ -9,37 +9,47 @@ static PyObject *JuliaCallError;
 static PyObject *name_jlslot;
 static JSym errorSym;
 
-PyObject* HandleJLErrorAndReturnNULL()
+PyObject *HandleJLErrorAndReturnNULL()
 {
-    // 动态分配 error msg
-    char errorBytes[2048] = {(char)0};
-    if (ErrorCode::ok == JLError_FetchMsgStr(&errorSym, SList_adapt(reinterpret_cast<uint8_t *>(errorBytes), sizeof(errorBytes))))
+    int64_t msgSize;
+    ErrorCode ret = JLError_FetchMsgSize(&msgSize);
+    if (ret != ErrorCode::ok)
     {
-      PyErr_SetString(JuliaCallError, errorBytes);
+        PyErr_SetString(JuliaCallError, "juliacall: unknown error");
+        return NULL;
+    }
+
+    char *errorBytes = new char[msgSize + 1]; // 动态分配足够大小的内存
+    errorBytes[msgSize] = '\0';
+
+    if (ErrorCode::ok == JLError_FetchMsgStr(&errorSym, SList_adapt(reinterpret_cast<uint8_t *>(errorBytes), msgSize + 1)))
+    {
+        PyErr_SetString(JuliaCallError, errorBytes);
     }
     else
     {
-      PyErr_SetString(JuliaCallError, "juliacall: unknown error");
+        PyErr_SetString(JuliaCallError, "juliacall: unknown error");
     }
+
+    delete[] errorBytes; // 释放动态分配的内存
     return NULL;
 }
 
-
 struct t_PyAPI
 {
-    PyObject* m_builtin;
-    PyObject* m_NumPy;
-    PyObject* t_JV;
-    PyObject* t_dict;
-    PyObject* t_tuple;
-    PyObject* t_int;
-    PyObject* t_float;
-    PyObject* t_str;
-    PyObject* t_bool;
-    PyObject* t_ndarray;
-    PyObject* t_complex;
-    PyObject* f_next;
-    PyObject* f_iter;
+    PyObject *m_builtin;
+    PyObject *m_NumPy;
+    PyObject *t_JV;
+    PyObject *t_dict;
+    PyObject *t_tuple;
+    PyObject *t_int;
+    PyObject *t_float;
+    PyObject *t_str;
+    PyObject *t_bool;
+    PyObject *t_ndarray;
+    PyObject *t_complex;
+    PyObject *f_next;
+    PyObject *f_iter;
 };
 
 struct t_JLAPI
@@ -100,7 +110,7 @@ struct t_JLAPI
     JV obj_zero;
 };
 
-typedef ErrorCode (*t_pycast2jl)(/* out */ JV* out, JV T, PyObject* py);
+typedef ErrorCode (*t_pycast2jl)(/* out */ JV *out, JV T, PyObject *py);
 typedef PyObject *(*t_pycast2py)(JV jv);
 static t_pycast2jl pycast2jl = NULL;
 static t_pycast2py pycast2py = NULL;
@@ -108,7 +118,6 @@ static const JV JV_NULL = 0;
 
 static t_PyAPI MyPyAPI;
 static t_JLAPI MyJLAPI;
-
 
 static void init_JLAPI()
 {
@@ -126,9 +135,9 @@ static void init_JLAPI()
     JLEval(&t, NULL, "Complex");
     JLTypeToIdent(&MyJLAPI.t_Complex, t);
     JLEval(&t, NULL, "AbstractSet");
-    JLTypeToIdent(&MyJLAPI.t_AbstractSet,t);
+    JLTypeToIdent(&MyJLAPI.t_AbstractSet, t);
     JLEval(&t, NULL, "AbstractDict");
-    JLTypeToIdent(&MyJLAPI.t_AbstractDict,t);
+    JLTypeToIdent(&MyJLAPI.t_AbstractDict, t);
     JLEval(&t, NULL, "AbstractArray");
     JLTypeToIdent(&MyJLAPI.t_AbstractArray, t);
     JLEval(&t, NULL, "BitArray");
@@ -176,8 +185,6 @@ static void init_JLAPI()
     JLEval(&MyJLAPI.f_tuple, NULL, "Base.tuple");
     JLEval(&MyJLAPI.f_length, NULL, "Base.length");
 
-
-
     JLEval(&MyJLAPI.obj_true, NULL, "true");
     JLEval(&MyJLAPI.obj_false, NULL, "false");
     JLEval(&MyJLAPI.obj_nothing, NULL, "nothing");
@@ -185,7 +192,7 @@ static void init_JLAPI()
     JLEval(&MyJLAPI.obj_JNumPySupportedNumPyArrayBoxingElementTypes, NULL, "Union{Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64, Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64, Bool}");
 }
 
-static void init_PyAPI(PyObject* t_JV)
+static void init_PyAPI(PyObject *t_JV)
 {
     MyPyAPI.t_JV = t_JV;
     MyPyAPI.m_builtin = PyImport_ImportModule("builtins");
@@ -201,6 +208,5 @@ static void init_PyAPI(PyObject* t_JV)
     MyPyAPI.f_next = PyObject_GetAttrString(MyPyAPI.m_builtin, "next");
     MyPyAPI.f_iter = PyObject_GetAttrString(MyPyAPI.m_builtin, "iter");
 }
-
 
 #endif

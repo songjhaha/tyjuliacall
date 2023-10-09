@@ -8,9 +8,6 @@
 #include <assert.h>
 #include <stdlib.h>
 
-// todo: attr_name_to_symbol(s::String)::Symbol
-// todo: is_type_exact(x::Py, t::Py)::Bool
-
 
 JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree);
 
@@ -389,6 +386,11 @@ PyObject *reasonable_box(JV jv)
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_Tuple))
     {
         JV N;
+        ErrorCode ret0 = JLGetInt64(&N, jv, true);
+        if (ret0 != ErrorCode::ok)
+        {
+            return HandleJLErrorAndReturnNULL();
+        }
         ErrorCode ret = JLCall(&N, MyJLAPI.f_length, SList_adapt(&jv, 1), emptyKwArgs());
         if (ret != ErrorCode::ok)
         {
@@ -396,10 +398,11 @@ PyObject *reasonable_box(JV jv)
         }
         PyObject *argtuple = PyTuple_New(N);
 
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < N; i++) 
+        {
             JV v;
             ErrorCode ret1 = JLGetIndexI(&v,jv,i);
-            if (ret != ErrorCode::ok)
+            if (ret1 != ErrorCode::ok)
             {
             return HandleJLErrorAndReturnNULL();
             }

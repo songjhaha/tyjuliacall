@@ -385,12 +385,16 @@ PyObject *reasonable_box(JV jv)
     // todo: tuple
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_Tuple))
     {
-        JV N;
-        ErrorCode ret0 = JLGetInt64(&N, jv, true);
+        JV jv_N;
+        ErrorCode ret0 = JLCall(&jv_N, MyJLAPI.f_length, SList_adapt(&jv, 1), emptyKwArgs());
         if (ret0 != ErrorCode::ok)
         {
             return HandleJLErrorAndReturnNULL();
         }
+        
+        int64_t N;
+        JLGetInt64(&N,jv_N, true);
+        JLFreeFromMe(jv_N);
         ErrorCode ret = JLCall(&N, MyJLAPI.f_length, SList_adapt(&jv, 1), emptyKwArgs());
         if (ret != ErrorCode::ok)
         {
@@ -401,7 +405,7 @@ PyObject *reasonable_box(JV jv)
         for (int i = 0; i < N; i++) 
         {
             JV v;
-            ErrorCode ret1 = JLGetIndexI(&v,jv,i);
+            ErrorCode ret1 = JLGetIndexI(&v,jv,i+1);
             if (ret1 != ErrorCode::ok)
             {
             return HandleJLErrorAndReturnNULL();

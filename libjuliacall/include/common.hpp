@@ -71,6 +71,7 @@ struct t_JLAPI
     JV f_eltype;
     JV f_length;
     JV f_repr;
+    JV f_display;
     JV f_isa;
     JV f_ncodeunits;
     JV f_square;
@@ -102,14 +103,17 @@ struct t_JLAPI
     JV f_getindex;
     JV f_setindex;
     JV f_tuple;
+    JV f_convert;
 
     JV obj_true;
     JV obj_false;
     JV obj_nothing;
-    JV obj_JNumPySupportedNumPyArrayBoxingElementTypes;
     JV obj_zero;
+    JV obj_Int64;
     JV obj_Base;
     JV obj_Main;
+    JV obj_String;
+    // JV obj_JNumPySupportedNumPyArrayBoxingElementTypes;
 };
 
 typedef ErrorCode (*t_pycast2jl)(/* out */ JV *out, JV T, PyObject *py);
@@ -154,6 +158,7 @@ static void init_JLAPI()
 
     JLEval(&MyJLAPI.f_eltype, NULL, "Base.eltype");
     JLEval(&MyJLAPI.f_repr, NULL, "Base.repr");
+    JLEval(&MyJLAPI.f_display, NULL, "Base.display");
     JLEval(&MyJLAPI.f_isa, NULL, "Base.isa");
     JLEval(&MyJLAPI.f_ncodeunits, NULL, "Base.ncodeunits");
     JLEval(&MyJLAPI.f_square, NULL, "square(x) = x .^ 2");
@@ -184,9 +189,10 @@ static void init_JLAPI()
     JLEval(&MyJLAPI.f_hash, NULL, "Base.hash");
     JLEval(&MyJLAPI.f_isempty, NULL, "Base.isempty");
     JLEval(&MyJLAPI.f_getindex, NULL, "Base.getindex");
-    JLEval(&MyJLAPI.f_setindex, NULL, "Base.setindex");
+    JLEval(&MyJLAPI.f_setindex, NULL, "Base.setindex!");
     JLEval(&MyJLAPI.f_tuple, NULL, "Base.tuple");
     JLEval(&MyJLAPI.f_length, NULL, "Base.length");
+    JLEval(&MyJLAPI.f_convert, NULL, "Base.convert");
 
     JLEval(&MyJLAPI.obj_true, NULL, "true");
     JLEval(&MyJLAPI.obj_false, NULL, "false");
@@ -194,7 +200,8 @@ static void init_JLAPI()
     JLEval(&MyJLAPI.obj_zero, NULL, "0");
     JLEval(&MyJLAPI.obj_Base, NULL, "Base");
     JLEval(&MyJLAPI.obj_Main, NULL, "Main");
-    JLEval(&MyJLAPI.obj_JNumPySupportedNumPyArrayBoxingElementTypes, NULL, "Union{Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64, Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64, Bool}");
+    JLEval(&MyJLAPI.obj_Int64, NULL, "Int64");
+    // JLEval(&MyJLAPI.obj_JNumPySupportedNumPyArrayBoxingElementTypes, NULL, "Union{Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64, Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64, Bool}");
 }
 
 static void init_PyAPI(PyObject *t_JV)

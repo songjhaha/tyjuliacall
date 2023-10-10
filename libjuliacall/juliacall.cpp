@@ -1,13 +1,15 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
-#include <tyjuliacapi.hpp>
-#include <TyPython.hpp>
-#include <common.hpp>
 #include <assert.h>
-#include <time.h>
 #include <stdlib.h>
 
-DLLEXPORT int init_libjuliacall(void *lpfnJLCApiGetter, void *lpfnPyCast2JL, void *lpfnPyCast2Py)
+#include <TyPython.hpp>
+#include <common.hpp>
+#include <tyjuliacapi.hpp>
+
+DLLEXPORT int init_libjuliacall(void *lpfnJLCApiGetter,
+                                void *lpfnPyCast2JL,
+                                void *lpfnPyCast2Py)
 {
   if (pycast2jl != NULL && pycast2py != NULL)
   {
@@ -35,13 +37,15 @@ static PyObject *jl_eval(PyObject *self, PyObject *args)
     return NULL;
   }
   char *command = const_cast<char *>(_command);
-  ErrorCode ret = JLEval(&result, NULL, SList_adapt(reinterpret_cast<uint8_t *>(command), strlen(command)));
+  ErrorCode ret = JLEval(
+      &result, NULL,
+      SList_adapt(reinterpret_cast<uint8_t *>(command), strlen(command)));
   if (ret != ErrorCode::ok)
   {
     return HandleJLErrorAndReturnNULL(); // 如果是错误的话，则处理
   }
   PyObject *pyout = reasonable_box(result);
-  if (!PyObject_IsInstance(pyout, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(pyout, MyPyAPI.t_JV))
   {
     // if pyout is a JV object, we should not free it from Julia.
     JLFreeFromMe(result);
@@ -52,7 +56,7 @@ static PyObject *jl_eval(PyObject *self, PyObject *args)
 static PyObject *jl_display(PyObject *self, PyObject *arg)
 {
   // check arg type
-  if (!PyObject_IsInstance(arg, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(arg, MyPyAPI.t_JV))
   {
     PyErr_SetString(JuliaCallError, "jl_display: expect object of JV class.");
     return NULL;
@@ -69,11 +73,11 @@ static PyObject *jl_display(PyObject *self, PyObject *arg)
     return HandleJLErrorAndReturnNULL();
   }
 
-  // convert Julia's String to Python's str.
-  // pycast2py is a C Function from julia,
-  // we could use JLGetUTF8String and PyUnicode_FromString instead,
-  // but this one is simple.
   PyObject *pyjv = pycast2py(jret);
+  if (pyjv == NULL)
+  {
+    PyErr_SetString(JuliaCallError, "jl_display: failed to convert JV to Python's str.");
+  }
 
   // free this Julia String
   JLFreeFromMe(jret);
@@ -89,7 +93,7 @@ static PyObject *jl_call(PyObject *self, PyObject *args)
     return NULL;
   }
 
-  if (!PyObject_IsInstance(pyjv, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(pyjv, MyPyAPI.t_JV))
   {
     PyErr_SetString(JuliaCallError, "jl_call: expect object of JV class.");
     return NULL;
@@ -99,13 +103,13 @@ static PyObject *jl_call(PyObject *self, PyObject *args)
     slf = unbox_julia(pyjv);
   }
 
-  if (!PyObject_IsInstance(posargs, MyPyAPI.t_tuple))
+  if (!PyCheck_Type_Exact(posargs, MyPyAPI.t_tuple))
   {
     PyErr_SetString(JuliaCallError, "args must be a tuple.");
     return NULL;
   }
 
-  if (!PyObject_IsInstance(kwargs, MyPyAPI.t_dict))
+  if (!PyCheck_Type_Exact(kwargs, MyPyAPI.t_dict))
   {
     PyErr_SetString(JuliaCallError, "kwargs must be a dict.");
     return NULL;
@@ -150,14 +154,16 @@ static PyObject *jl_call(PyObject *self, PyObject *args)
     count++;
   }
 
-  STuple<JSym, JV> *jlkwargs = (STuple<JSym, JV> *)malloc(nkargs * sizeof(STuple<JSym, JV>));
+  STuple<JSym, JV> *jlkwargs =
+      (STuple<JSym, JV> *)malloc(nkargs * sizeof(STuple<JSym, JV>));
   for (Py_ssize_t i = 0; i < nkargs; i++)
   {
     jlkwargs[i] = STuple<JSym, JV>{jv_key_list[i], jv_value_list[i]};
   }
 
   JV out;
-  ret = JLCall(&out, slf, SList_adapt(jlargs, nargs), SList_adapt(jlkwargs, nkargs));
+  ret = JLCall(&out, slf, SList_adapt(jlargs, nargs),
+               SList_adapt(jlkwargs, nkargs));
 
   if (ret != ErrorCode::ok)
   {
@@ -169,7 +175,7 @@ static PyObject *jl_call(PyObject *self, PyObject *args)
   }
 
   PyObject *pyout = reasonable_box(out);
-  if (!PyObject_IsInstance(pyout, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(pyout, MyPyAPI.t_JV))
   {
     // if pyout is a JV object, we should not free it from Julia.
     JLFreeFromMe(out);
@@ -192,7 +198,7 @@ static PyObject *jl_getattr(PyObject *self, PyObject *args)
   }
 
   JV slf;
-  if (!PyObject_IsInstance(pyjv, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(pyjv, MyPyAPI.t_JV))
   {
     PyErr_SetString(JuliaCallError, "jl_getattr: expect object of JV class.");
     return NULL;
@@ -213,7 +219,7 @@ static PyObject *jl_getattr(PyObject *self, PyObject *args)
   }
 
   PyObject *pyout = reasonable_box(out);
-  if (!PyObject_IsInstance(pyout, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(pyout, MyPyAPI.t_JV))
   {
     // if pyout is a JV object, we should not free it from Julia.
     JLFreeFromMe(out);
@@ -224,7 +230,8 @@ static PyObject *jl_getattr(PyObject *self, PyObject *args)
 static PyObject *jl_setattr(PyObject *self, PyObject *args)
 {
   // jl_setattr(self: JV, attr: str, value)
-  // 1. check args type, we should get 3 args: PyObject* pyjv, const char* attr, PyObject* value
+  // 1. check args type, we should get 3 args:
+  //    PyObject* pyjv, const char* attr, PyObject* value
   PyObject *pyjv;
   PyObject *value;
   const char *attr;
@@ -234,7 +241,7 @@ static PyObject *jl_setattr(PyObject *self, PyObject *args)
   }
   // 2. check pyjv is a JV object, and unbox it as JV
   JV slf;
-  if (!PyObject_IsInstance(pyjv, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(pyjv, MyPyAPI.t_JV))
   {
     PyErr_SetString(JuliaCallError, "jl_getattr: expect object of JV class.");
     return NULL;
@@ -282,7 +289,7 @@ static PyObject *jl_hasattr(PyObject *self, PyObject *args)
   }
 
   JV slf;
-  if (!PyObject_IsInstance(pyjv, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(pyjv, MyPyAPI.t_JV))
   {
     PyErr_SetString(JuliaCallError, "jl_hasattr: expect object of JV class.");
     return NULL;
@@ -322,7 +329,7 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
   }
   // check pyjv is a JV object, and unbox it as JV
   JV slf;
-  if (!PyObject_IsInstance(pyjv, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(pyjv, MyPyAPI.t_JV))
   {
     PyErr_SetString(JuliaCallError, "jl_getitem: expect object of JV class.");
     return NULL;
@@ -334,7 +341,7 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
 
   // 如果是元组，获取好几个元素
   //  使用Python C API时，需要使用 stable API
-  if (PyObject_IsInstance(item, MyPyAPI.t_tuple))
+  if (PyCheck_Type_Exact(item, MyPyAPI.t_tuple))
   {
     // 如果是元组，获取元组的长度, length 是 self 加上元组长度
     Py_ssize_t length = PyTuple_Size(item) + 1;
@@ -348,7 +355,8 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
 
     jv_list[0] = slf;
     // skip the first one, it's self
-    ErrorCode ret = ToJListFromPyTuple((jv_list + 1), (jv_tobefree + 1), item, length - 1);
+    ErrorCode ret =
+        ToJListFromPyTuple((jv_list + 1), (jv_tobefree + 1), item, length - 1);
     if (ret != ErrorCode::ok)
     {
       free_jv_list(jv_list, jv_tobefree, length);
@@ -356,7 +364,8 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
     }
 
     JV jret;
-    ret = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jv_list, length), emptyKwArgs());
+    ret = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jv_list, length),
+                 emptyKwArgs());
     free_jv_list(jv_list, jv_tobefree, length);
     if (ret != ErrorCode::ok)
     {
@@ -364,7 +373,7 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
     }
 
     PyObject *py = reasonable_box(jret);
-    if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
+    if (!PyCheck_Type_Exact(py, MyPyAPI.t_JV))
     {
       // if pyout is a JV object, we should not free it from Julia.
       JLFreeFromMe(jret);
@@ -383,7 +392,8 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
     JV jargs[2];
     jargs[0] = slf;
     jargs[1] = v;
-    ErrorCode ret2 = JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jargs, 2), emptyKwArgs());
+    ErrorCode ret2 =
+        JLCall(&jret, MyJLAPI.f_getindex, SList_adapt(jargs, 2), emptyKwArgs());
     if (needToBeFree)
     {
       JLFreeFromMe(v);
@@ -394,7 +404,7 @@ static PyObject *jl_getitem(PyObject *self, PyObject *args)
       return HandleJLErrorAndReturnNULL();
     }
     PyObject *py = reasonable_box(jret);
-    if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
+    if (!PyCheck_Type_Exact(py, MyPyAPI.t_JV))
     {
       // if pyout is a JV object, we should not free it from Julia.
       JLFreeFromMe(jret);
@@ -411,7 +421,7 @@ static PyObject *jl_setitem(PyObject *self, PyObject *args)
   {
     return NULL;
   }
-  if (!PyObject_IsInstance(pyjv, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(pyjv, MyPyAPI.t_JV))
   {
     PyErr_SetString(JuliaCallError, "jl_setitem: expect object of JV class.");
     return NULL;
@@ -420,7 +430,7 @@ static PyObject *jl_setitem(PyObject *self, PyObject *args)
   {
     slf = unbox_julia(pyjv);
   }
-  if (PyObject_IsInstance(item, MyPyAPI.t_tuple))
+  if (PyCheck_Type_Exact(item, MyPyAPI.t_tuple))
   {
     Py_ssize_t length = PyTuple_Size(item) + 2;
     JV *jv_list = (JV *)calloc(length, sizeof(JV));
@@ -436,7 +446,8 @@ static PyObject *jl_setitem(PyObject *self, PyObject *args)
     }
     jv_list[0] = slf;
     jv_list[1] = v;
-    ErrorCode ret = ToJListFromPyTuple((jv_list + 2), (jv_tobefree + 2), item, length - 2);
+    ErrorCode ret =
+        ToJListFromPyTuple((jv_list + 2), (jv_tobefree + 2), item, length - 2);
     if (ret != ErrorCode::ok)
     {
       free_jv_list(jv_list, jv_tobefree, length);
@@ -444,7 +455,8 @@ static PyObject *jl_setitem(PyObject *self, PyObject *args)
     }
 
     JV jret;
-    ret = JLCall(&jret, MyJLAPI.f_setindex, SList_adapt(jv_list, length), emptyKwArgs());
+    ret = JLCall(&jret, MyJLAPI.f_setindex, SList_adapt(jv_list, length),
+                 emptyKwArgs());
     free_jv_list(jv_list, jv_tobefree, length);
     if (ret != ErrorCode::ok)
     {
@@ -452,7 +464,7 @@ static PyObject *jl_setitem(PyObject *self, PyObject *args)
     }
 
     PyObject *py = reasonable_box(jret);
-    if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
+    if (!PyCheck_Type_Exact(py, MyPyAPI.t_JV))
     {
       // if pyout is a JV object, we should not free it from Julia.
       JLFreeFromMe(jret);
@@ -473,31 +485,26 @@ static PyObject *jl_setitem(PyObject *self, PyObject *args)
     if (j_itme == JV_NULL)
     {
       if (needToBeFree_val)
-      {
         JLFreeFromMe(v);
-      }
       return HandleJLErrorAndReturnNULL();
     }
     JV jargs[3];
     jargs[0] = slf;
     jargs[1] = v;
     jargs[2] = j_itme;
-    ErrorCode ret2 = JLCall(&jret, MyJLAPI.f_setindex, SList_adapt(jargs, 3), emptyKwArgs());
+    ErrorCode ret2 =
+        JLCall(&jret, MyJLAPI.f_setindex, SList_adapt(jargs, 3), emptyKwArgs());
     if (needToBeFree_val)
-    {
       JLFreeFromMe(v);
-    }
     if (needToBeFree_item)
-    {
       JLFreeFromMe(j_itme);
-    }
 
     if (ret2 != ErrorCode::ok)
     {
       return HandleJLErrorAndReturnNULL();
     }
     PyObject *py = reasonable_box(jret);
-    if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
+    if (!PyCheck_Type_Exact(py, MyPyAPI.t_JV))
     {
       // if pyout is a JV object, we should not free it from Julia.
       JLFreeFromMe(jret);
@@ -508,7 +515,7 @@ static PyObject *jl_setitem(PyObject *self, PyObject *args)
   return Py_None;
 }
 
-static PyObject *jl_binary_operation(PyObject *self, PyObject *args, JV f)
+static PyObject *jl_binary_operation(PyObject *self, PyObject *args, JV f, bool8_t reverse = false)
 {
   // 1. check args type
   PyObject *pyjv;
@@ -519,7 +526,7 @@ static PyObject *jl_binary_operation(PyObject *self, PyObject *args, JV f)
   }
   // 2. check pyjv is a JV object, and unbox it as JV
   JV slf;
-  if (!PyObject_IsInstance(pyjv, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(pyjv, MyPyAPI.t_JV))
   {
     PyErr_SetString(JuliaCallError, "expect object of JV class.");
     return NULL;
@@ -528,6 +535,7 @@ static PyObject *jl_binary_operation(PyObject *self, PyObject *args, JV f)
   {
     slf = unbox_julia(pyjv);
   }
+
   // 3. unbox value as JV
   bool8_t needToBeFree;
   JV v = reasonable_unbox(value, &needToBeFree);
@@ -535,18 +543,25 @@ static PyObject *jl_binary_operation(PyObject *self, PyObject *args, JV f)
   {
     return NULL;
   }
+
   // 4. call JLCallS
   JV jret;
   JV jargs[2];
-  jargs[0] = slf;
-  jargs[1] = v;
+  if (reverse)
+  {
+    jargs[0] = v;
+    jargs[1] = slf;
+  }
+  else
+  {
+    jargs[0] = slf;
+    jargs[1] = v;
+  }
 
   ErrorCode ret;
   ret = JLCall(&jret, f, SList_adapt(jargs, 2), emptyKwArgs());
   if (needToBeFree)
-  {
     JLFreeFromMe(v);
-  }
 
   // 5. check if error occurs, if so, handle it and return NULL
   if (ret != ErrorCode::ok)
@@ -554,7 +569,7 @@ static PyObject *jl_binary_operation(PyObject *self, PyObject *args, JV f)
     return HandleJLErrorAndReturnNULL();
   }
   PyObject *py = reasonable_box(jret);
-  if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(py, MyPyAPI.t_JV))
   {
     // if pyout is a JV object, we should not free it from Julia.
     JLFreeFromMe(jret);
@@ -659,14 +674,14 @@ static PyObject *jl_ge(PyObject *self, PyObject *args)
 
 static PyObject *jl_contains(PyObject *self, PyObject *args)
 {
-  return jl_binary_operation(self, args, MyJLAPI.f_in);
+  return jl_binary_operation(self, args, MyJLAPI.f_in, true);
 }
 
 static PyObject *jl_unary_opertation(PyObject *self, PyObject *args, JV f)
 {
   // 1. check pyjv is a JV object, and unbox it as JV
   JV slf;
-  if (!PyObject_IsInstance(args, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(args, MyPyAPI.t_JV))
   {
     PyErr_SetString(JuliaCallError, "expect object of JV class.");
     return NULL;
@@ -685,7 +700,7 @@ static PyObject *jl_unary_opertation(PyObject *self, PyObject *args, JV f)
     return HandleJLErrorAndReturnNULL();
   }
   PyObject *py = reasonable_box(jret);
-  if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(py, MyPyAPI.t_JV))
   {
     // if pyout is a JV object, we should not free it from Julia.
     JLFreeFromMe(jret);
@@ -717,7 +732,7 @@ static PyObject *jl_bool(PyObject *self, PyObject *args)
 {
   //  1. check pyjv is a JV object, and unbox it as JV
   JV slf;
-  if (!PyObject_IsInstance(args, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(args, MyPyAPI.t_JV))
   {
     PyErr_SetString(JuliaCallError, " expect object of JV class.");
     return NULL;
@@ -746,7 +761,8 @@ static PyObject *jl_bool(PyObject *self, PyObject *args)
   }
   // 3.检查是不是抽象数组 抽象字典 抽象集合 抽象字符串
   if (JLIsInstanceWithTypeSlot(slf, MyJLAPI.t_AbstractArray) ||
-      JLIsInstanceWithTypeSlot(slf, MyJLAPI.t_AbstractDict) || JLIsInstanceWithTypeSlot(slf, MyJLAPI.t_AbstractSet) ||
+      JLIsInstanceWithTypeSlot(slf, MyJLAPI.t_AbstractDict) ||
+      JLIsInstanceWithTypeSlot(slf, MyJLAPI.t_AbstractSet) ||
       JLIsInstanceWithTypeSlot(slf, MyJLAPI.t_AbstractString))
   {
     JV jret;
@@ -757,7 +773,7 @@ static PyObject *jl_bool(PyObject *self, PyObject *args)
       return HandleJLErrorAndReturnNULL();
     }
     PyObject *py = reasonable_box(jret);
-    if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
+    if (!PyCheck_Type_Exact(py, MyPyAPI.t_JV))
     {
       // if pyout is a JV object, we should not free it from Julia.
       JLFreeFromMe(jret);
@@ -768,41 +784,55 @@ static PyObject *jl_bool(PyObject *self, PyObject *args)
   return Py_True;
 }
 
-static PyObject *jl_hash(PyObject *self, PyObject *args)
+static PyObject *jl_hash(PyObject *self, PyObject *arg)
 {
-  // 1. check pyjv is a JV object, and unbox it as JV
+  // check pyjv is a JV object, and unbox it as JV
   JV slf;
-  if (!PyObject_IsInstance(args, MyPyAPI.t_JV))
+  if (!PyCheck_Type_Exact(arg, MyPyAPI.t_JV))
   {
     PyErr_SetString(JuliaCallError, " expect object of JV class.");
     return NULL;
   }
   else
   {
-    slf = unbox_julia(args);
+    slf = unbox_julia(arg);
   }
-  // 2. call JLCallS
+
+  // call hash(v)
   JV jret;
   ErrorCode ret;
   ret = JLCall(&jret, MyJLAPI.f_hash, SList_adapt(&slf, 1), emptyKwArgs());
-  // 3. check if error occurs, if so, handle it and return NULL
+  // check if error occurs, if so, handle it and return NULL
   if (ret != ErrorCode::ok)
   {
     return HandleJLErrorAndReturnNULL();
   }
-  ErrorCode ret1;
-  uint64_t result;
-  ret1 = JLGetUInt64(&result, jret, true);
-  if (ret1 != ErrorCode::ok)
+
+  // call hash(v) % Int64
+  JV jret2;
+  JV jv_args[2];
+  jv_args[0] = jret;
+  jv_args[1] = MyJLAPI.obj_Int64;
+  ret = JLCall(&jret2, MyJLAPI.f_mod, SList_adapt(jv_args, 2), emptyKwArgs());
+
+  if (ret != ErrorCode::ok)
   {
+    JLFreeFromMe(jret);
     return HandleJLErrorAndReturnNULL();
   }
-  PyObject *py = PyLong_FromUnsignedLongLong(result);
-  if (!PyObject_IsInstance(py, MyPyAPI.t_JV))
+
+  int64_t result;
+  if (ErrorCode::ok != JLGetInt64(&result, jret2, false))
   {
-    // if pyout is a JV object, we should not free it from Julia.
     JLFreeFromMe(jret);
+    JLFreeFromMe(jret2);
+    return HandleJLErrorAndReturnNULL();
   }
+  PyObject *py = PyLong_FromLongLong(result);
+
+  // it's a julia's number, just free it
+  JLFreeFromMe(jret);
+  JLFreeFromMe(jret2);
   return py;
 }
 
@@ -813,6 +843,7 @@ static PyMethodDef jl_methods[] = {
     {"__jl_setattr__", jl_setattr, METH_VARARGS, "set attr of JV object"},
     {"__jl_hasattr__", jl_hasattr, METH_VARARGS, "has attr of JV object"},
     {"__jl_getitem__", jl_getitem, METH_VARARGS, "get item of JV object"},
+    {"__jl_setitem__", jl_setitem, METH_VARARGS, "set item of JV object"},
     {"__jl_add__", jl_add, METH_VARARGS, "add function"},
     {"__jl_sub__", jl_sub, METH_VARARGS, "sub function"},
     {"__jl_mul__", jl_mul, METH_VARARGS, "mul function"},
@@ -859,22 +890,32 @@ static PyObject *setup_api(PyObject *self, PyObject *args)
     PyModule_AddFunctions(m_jv, jl_methods);
   }
 
+  Py_INCREF(Py_None);
+  return Py_None;
+}
+
+static PyObject *setup_basics(PyObject *self, PyObject *m_tyjuliacall_jnumpy)
+{
   PyObject *j_Base = reasonable_box(MyJLAPI.obj_Base);
   PyObject *j_Main = reasonable_box(MyJLAPI.obj_Main);
-  PyModule_AddObject(m_jv, "Base", j_Base);
-  PyModule_AddObject(m_jv, "Main", j_Main);
+  PyModule_AddObject(m_tyjuliacall_jnumpy, "Base", j_Base);
+  PyModule_AddObject(m_tyjuliacall_jnumpy, "Main", j_Main);
 
   Py_INCREF(Py_None);
   return Py_None;
 }
 
 static PyMethodDef methods[] = {
-    {"setup_api", setup_api, METH_VARARGS, "setup JV class and init MyPyAPI/MyJLAPI"},
-    {"evaluate", jl_eval, METH_VARARGS, "eval julia function and return a python capsule"},
+    {"setup_api", setup_api, METH_VARARGS,
+     "setup JV class and init MyPyAPI/MyJLAPI"},
+    {"evaluate", jl_eval, METH_VARARGS,
+     "eval julia function and return a python capsule"},
+    {"setup_basics", setup_basics, METH_O,
+     "setup JV module Base and Main in python module"},
     {NULL, NULL, 0, NULL}};
 
-static struct PyModuleDef juliacall_module = {PyModuleDef_HEAD_INIT, "_tyjuliacall_jnumpy",
-                                              NULL, -1, methods};
+static struct PyModuleDef juliacall_module = {
+    PyModuleDef_HEAD_INIT, "_tyjuliacall_jnumpy", NULL, -1, methods};
 
 DLLEXPORT PyObject *init_PyModule(void)
 {

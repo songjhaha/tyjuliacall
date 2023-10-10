@@ -119,6 +119,11 @@ def _load_pyjulia_core() -> ModuleType:
     elif pyjulia_core_provider == "jnumpy":
         import _tyjuliacall_jnumpy  # type: ignore
 
+        # temporary workaround, will be removed after TyJuliaCAPI update
+        from _tyjuliacall_jnumpy import Base, Main # type: ignore
+        def jl_eval(command: str):
+            return Base.eval(Main, Base.Meta.parseall(command))
+        _tyjuliacall_jnumpy.evaluate = jl_eval # type: ignore
         return _tyjuliacall_jnumpy
     else:
         raise EnvironmentError(
@@ -156,6 +161,9 @@ class JuliaModule(ModuleType):
 
     def __getattr__(self, name):
         return getattr(self.__it, name)
+
+    def __hasattr__(self, name):
+        return hasattr(self.__it, name)
 
     def __dir__(self):
         return list(self._jlapi.Main.names(self.__it, all=True, imported=True))
@@ -289,7 +297,7 @@ def _init_jl_from_lib(lib):
                 TyJuliaSetup.init()
             """)
         except jnumpy.init.JuliaError:
-            raise RuntimeError("invalid julia initialization")
+            raise RuntimeError("invalid julia initialization, try install julia package TyPython and TyJuliaCAPI.")
 
 def setup():
     global BASE_IMAGE
@@ -347,18 +355,12 @@ def setup():
         if pyjulia_core_provider == "jnumpy":
             _init_jl_from_lib(lib)
 
-            # with tictoc("init_project in {} seconds"):
-            #     jnumpy.init_project(__file__)
-
-            # with tictoc("exec_julia in {} seconds"):
-            #     jnumpy.exec_julia("Pkg.activate(io=devnull)")
-
             import _tyjuliacall_jnumpy  # type: ignore
             from tyjuliasetup import jv
 
             with tictoc("setup_jv in {} seconds"):
                 _tyjuliacall_jnumpy.setup_api(jv.JV, jv)
-                # _tyjuliacall_jnumpy.setup_basics(_tyjuliacall_jnumpy)
+                _tyjuliacall_jnumpy.setup_basics(_tyjuliacall_jnumpy)
                 _tyjuliacall_jnumpy.JV = jv.JV
         elif pyjulia_core_provider == "pycall":
             lib.jl_eval_string("import PyCall".encode("utf-8"))

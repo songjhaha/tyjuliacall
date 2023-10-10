@@ -10,7 +10,20 @@
 
 JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree);
 
-static void PyCapsule_Destruct_JuliaAsPython(PyObject *capsule)
+static int PyCheck_Type_Exact(PyObject *py, PyObject *type)
+{
+    if ((PyObject *)Py_TYPE(py) == type)
+    {
+        return 1;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+static void
+PyCapsule_Destruct_JuliaAsPython(PyObject *capsule)
 {
     // destruct of capsule(__jlslot__)
     JV *jv = (JV *)PyCapsule_GetPointer(capsule, NULL);
@@ -204,46 +217,46 @@ JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree)
     if (py == Py_None)
         return MyJLAPI.obj_nothing;
 
-    if (PyObject_IsInstance(py, MyPyAPI.t_JV))
+    if (PyCheck_Type_Exact(py, MyPyAPI.t_JV))
         return unbox_julia(py);
 
     JV out;
-    if (PyObject_IsInstance(py, MyPyAPI.t_int))
+    if (PyCheck_Type_Exact(py, MyPyAPI.t_int))
     {
         *needToBeFree = true;
         TOJLInt64FromPy(&out, py);
         return out;
     }
 
-    if (PyObject_IsInstance(py, MyPyAPI.t_float))
+    if (PyCheck_Type_Exact(py, MyPyAPI.t_float))
     {
         *needToBeFree = true;
         ToJLFloat64FromPy(&out, py);
         return out;
     }
 
-    if (PyObject_IsInstance(py, MyPyAPI.t_str))
+    if (PyCheck_Type_Exact(py, MyPyAPI.t_str))
     {
         *needToBeFree = true;
         ToJLStringFromPy(&out, py);
         return out;
     }
 
-    if (PyObject_IsInstance(py, MyPyAPI.t_bool))
+    if (PyCheck_Type_Exact(py, MyPyAPI.t_bool))
     {
         *needToBeFree = true;
         ToJLBoolFromPy(&out, py);
         return out;
     }
 
-    if (PyObject_IsInstance(py, MyPyAPI.t_complex))
+    if (PyCheck_Type_Exact(py, MyPyAPI.t_complex))
     {
         *needToBeFree = true;
         ToJLComplexFromPy(&out, py);
         return out;
     }
 
-    if (PyObject_IsInstance(py, MyPyAPI.t_ndarray))
+    if (PyCheck_Type_Exact(py, MyPyAPI.t_ndarray))
     {
         *needToBeFree = true;
         ErrorCode ret = pycast2jl(&out, MyJLAPI.t_AbstractArray, py);
@@ -253,12 +266,12 @@ JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree)
         }
         else
         {
-            // todo: string array
+            // TODO(sjh): string array
             return out;
         }
     }
 
-    if (PyObject_IsInstance(py, MyPyAPI.t_tuple))
+    if (PyCheck_Type_Exact(py, MyPyAPI.t_tuple))
     {
         ErrorCode ret = ToJLTupleFromPy(&out, py);
         if (ret == ErrorCode::ok)
@@ -275,49 +288,6 @@ JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree)
     return JV_NULL;
 }
 
-// PyObject* UnsafePyLongFromJL(JV jv)
-// {
-//     int64_t i;
-//     JLGetInt64(&i, jv, true);
-//     return PyLong_FromLongLong(i);
-// }
-
-// PyObject* UnsafePyDoubleFromJL(JV jv)
-// {
-//     double i;
-//     JLGetDouble(&i, jv, true);
-//     return PyFloat_FromDouble(i);
-// }
-
-// PyObject* UnsafePyBoolFromJL(JV jv)
-// {
-//     bool8_t i;
-//     JLGetBool(&i, jv, true);
-//     return PyBool_FromLong(i);
-// }
-
-// PyObject* UnsafePyStringFromJL(JV jv)
-// {
-//     JV ncode;
-//     JLCall(&ncode, MyJLAPI.f_ncodeunits, SList_adapt(&jv, 1), emptyKwArgs());
-//     int64_t len;
-//     JLGetInt64(&len, ncode, true);
-//     JLFreeFromMe(ncode);
-
-//     if (len == 0)
-//         return PyUnicode_FromString("");
-//     else
-//     {
-//         // this copy the string twice
-//         char *buf = (char *)malloc(len + 1);
-//         JLGetUTF8String(SList_adapt(reinterpret_cast<uint8_t *>(const_cast<char *>(buf)), len), jv);
-//         buf[len] = '\0';
-//         PyObject* str = PyUnicode_FromString(buf);
-//         free(buf);
-//         return str;
-//     }
-// }
-
 PyObject *reasonable_box(JV jv)
 {
     PyObject *py;
@@ -331,42 +301,47 @@ PyObject *reasonable_box(JV jv)
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_Integer))
     {
         py = pycast2py(jv);
-        return py;
+        if (py != NULL)
+            return py;
     }
 
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_AbstractFloat))
     {
         py = pycast2py(jv);
-        return py;
+        if (py != NULL)
+            return py;
     }
 
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_Bool))
     {
         py = pycast2py(jv);
-        return py;
+        if (py != NULL)
+            return py;
     }
 
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_Complex))
     {
         py = pycast2py(jv);
-        return py;
+        if (py != NULL)
+            return py;
     }
 
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_String))
     {
         py = pycast2py(jv);
-        return py;
+        if (py != NULL)
+            return py;
     }
 
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_Number))
     {
         py = pycast2py(jv);
-        return py;
+        if (py != NULL)
+            return py;
     }
 
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_AbstractArray))
     {
-        // todo
         if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_BitArray))
         {
             py = box_julia(jv);
@@ -403,15 +378,32 @@ PyObject *reasonable_box(JV jv)
                 return HandleJLErrorAndReturnNULL();
             }
             PyObject *arg = reasonable_box(v);
-            if (!PyObject_IsInstance(arg, MyPyAPI.t_JV))
+            if (!PyCheck_Type_Exact(arg, MyPyAPI.t_JV))
             {
                 JLFreeFromMe(v);
             }
+            // reasonable_box should always return a new reference
             // Py_INCREF(arg);
             PyTuple_SetItem(argtuple, i, arg);
         }
         return argtuple;
     }
+
+    if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_AbstractString))
+    {
+        JV jv_str;
+        JV jv_arg[2];
+        jv_arg[0] = MyJLAPI.obj_String;
+        jv_arg[1] = jv;
+        if (ErrorCode::ok == JLCall(&jv_str, MyJLAPI.f_convert, SList_adapt(jv_arg, 2), emptyKwArgs()))
+        {
+            py = pycast2py(jv_str);
+            JLFreeFromMe(jv_str);
+            if (py != NULL)
+                return py;
+        }
+    }
+
     return box_julia(jv);
 }
 

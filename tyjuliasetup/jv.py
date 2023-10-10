@@ -48,7 +48,7 @@ class JV:
 
     def __setattr__(self, name: str, value: typing.Any):
         return __jl_setattr__(self, name, value)
-    
+
     def __hasattr__(self, name: str):
         return __jl_hasattr__(self, name)
 
@@ -137,22 +137,22 @@ class JV:
         return __jl_hash__(self)
 
     def __repr__(self):
-        return __jl_repr__(self)
+        return f"<JV({__jl_repr__(self)}) at {hex(id(self))}>"
 
     # def _repr_pretty_(self, p, cycle):
     #     p.text(_jl_repr_pretty_(self) if not cycle else "...")
 
-    # def __iter__(self):
-    #     global _jl_iterate
-    #     try:
-    #         jl_iterate = _jl_iterate  # type: ignore
-    #     except NameError:
-    #         from _tyjuliacall_jnumpy import Base  # type: ignore
+    def __iter__(self):
+        global _jl_iterate
+        try:
+            jl_iterate = _jl_iterate  # type: ignore
+        except NameError:
+            from _tyjuliacall_jnumpy import Base  # type: ignore
 
-    #         jl_iterate = _jl_iterate = Base.iterate
+            jl_iterate = _jl_iterate = Base.iterate
 
-    #     pair = jl_iterate(self)
-    #     while pair is not None:
-    #         element, state = pair
-    #         yield element
-    #         pair = jl_iterate(self, state)
+        pair = jl_iterate(self)
+        while pair is not None:
+            element, state = pair
+            yield element
+            pair = jl_iterate(self, state)

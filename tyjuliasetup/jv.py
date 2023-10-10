@@ -4,6 +4,7 @@ import typing
 __jl_invoke__: typing.Callable[[JV, tuple, dict], typing.Any]
 __jl_getattr__: typing.Callable[[JV, str], typing.Any]
 __jl_setattr__: typing.Callable[[JV, str, typing.Any], typing.Any]
+__jl_hasattr__: typing.Callable[[JV, str], typing.Any]
 __jl_getitem__: typing.Callable[[JV, typing.Any], typing.Any]
 __jl_setitem__: typing.Callable[[JV, typing.Any, typing.Any], typing.Any]
 __jl_add__: typing.Callable[[JV, typing.Any], typing.Any]

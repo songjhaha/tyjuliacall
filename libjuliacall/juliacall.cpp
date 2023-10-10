@@ -175,9 +175,8 @@ static PyObject *jl_call(PyObject *self, PyObject *args)
   STuple<JSym, JV> *jlkwargs = (STuple<JSym, JV> *)malloc(nkargs * sizeof(STuple<JSym, JV>));
   for (Py_ssize_t i = 0; i < nkargs; i++)
   {
-    jlkwargs[i] = STuple<JSym, JV> {jv_key_list[i], jv_value_list[i]};
+    jlkwargs[i] = STuple<JSym, JV>{jv_key_list[i], jv_value_list[i]};
   }
-
 
   JV out;
   ret = JLCall(&out, slf, SList_adapt(jlargs, nargs), SList_adapt(jlkwargs, nkargs));
@@ -293,6 +292,46 @@ static PyObject *jl_setattr(PyObject *self, PyObject *args)
   // 6. if success, return Py_None
   Py_INCREF(Py_None);
   return Py_None;
+}
+
+static PyObject *jl_hasattr(PyObject *self, PyObject *args)
+{
+  PyObject *pyjv;
+  const char *attr;
+  if (!PyArg_ParseTuple(args, "Os", &pyjv, &attr))
+  {
+    return NULL;
+  }
+
+  JV slf;
+  if (!PyObject_IsInstance(pyjv, MyPyAPI.t_JV))
+  {
+    PyErr_SetString(JuliaCallError, "jl_hasattr: expect object of JV class.");
+    return NULL;
+  }
+  else
+  {
+    slf = unbox_julia(pyjv);
+  }
+
+  JSym sym;
+  JSymFromString(&sym, attr);
+
+  bool8_t out;
+  ErrorCode ret = JLHasProperty(&out, slf, sym);
+  if (ret != ErrorCode::ok)
+  {
+    return HandleJLErrorAndReturnNULL();
+  }
+
+  if (out)
+  {
+    Py_RETURN_TRUE; // 返回Python的True
+  }
+  else
+  {
+    Py_RETURN_FALSE; // 返回Python的False
+  }
 }
 
 static PyObject *jl_getitem(PyObject *self, PyObject *args)
@@ -794,6 +833,7 @@ static PyMethodDef jl_methods[] = {
     {"__jl_repr__", jl_display, METH_O, "display JV as string"},
     {"__jl_getattr__", jl_getattr, METH_VARARGS, "get attr of JV object"},
     {"__jl_setattr__", jl_setattr, METH_VARARGS, "set attr of JV object"},
+    {"__jl_hasattr__", jl_hasattr, METH_VARARGS, "has attr of JV object"},
     {"__jl_getitem__", jl_getitem, METH_VARARGS, "get item of JV object"},
     {"__jl_add__", jl_add, METH_VARARGS, "add function"},
     {"__jl_sub__", jl_sub, METH_VARARGS, "sub function"},

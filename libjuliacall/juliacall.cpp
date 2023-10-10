@@ -49,28 +49,6 @@ static PyObject *jl_eval(PyObject *self, PyObject *args)
   return pyout;
 }
 
-static PyObject *jl_square(PyObject *self, PyObject *args)
-{
-  bool8_t needToBeFree;
-  JV v = reasonable_unbox(args, &needToBeFree);
-
-  JV jret;
-  ErrorCode ret = JLCall(&jret, MyJLAPI.f_square, SList_adapt(&v, 1), emptyKwArgs());
-  if (needToBeFree)
-  {
-    JLFreeFromMe(v);
-  }
-
-  if (ret != ErrorCode::ok)
-  {
-    return HandleJLErrorAndReturnNULL();
-  }
-
-  PyObject *py = reasonable_box(jret); // jret变成python类型
-  JLFreeFromMe(jret);
-  return py;
-}
-
 static PyObject *jl_display(PyObject *self, PyObject *arg)
 {
   // check arg type
@@ -881,13 +859,17 @@ static PyObject *setup_api(PyObject *self, PyObject *args)
     PyModule_AddFunctions(m_jv, jl_methods);
   }
 
+  PyObject *j_Base = reasonable_box(MyJLAPI.obj_Base);
+  PyObject *j_Main = reasonable_box(MyJLAPI.obj_Main);
+  PyModule_AddObject(m_jv, "Base", j_Base);
+  PyModule_AddObject(m_jv, "Main", j_Main);
+
   Py_INCREF(Py_None);
   return Py_None;
 }
 
 static PyMethodDef methods[] = {
     {"setup_api", setup_api, METH_VARARGS, "setup JV class and init MyPyAPI/MyJLAPI"},
-    {"jl_square", jl_square, METH_O, "Square function"},
     {"evaluate", jl_eval, METH_VARARGS, "eval julia function and return a python capsule"},
     {NULL, NULL, 0, NULL}};
 

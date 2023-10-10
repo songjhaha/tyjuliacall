@@ -8,7 +8,6 @@
 #include <assert.h>
 #include <stdlib.h>
 
-
 JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree);
 
 static void PyCapsule_Destruct_JuliaAsPython(PyObject *capsule)
@@ -259,7 +258,6 @@ JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree)
         }
     }
 
-    // todo: python's tuple
     if (PyObject_IsInstance(py, MyPyAPI.t_tuple))
     {
         ErrorCode ret = ToJLTupleFromPy(&out, py);
@@ -382,7 +380,6 @@ PyObject *reasonable_box(JV jv)
         return py;
     }
 
-    // todo: tuple
     if (JLIsInstanceWithTypeSlot(jv, MyJLAPI.t_Tuple))
     {
         JV jv_N;
@@ -391,26 +388,26 @@ PyObject *reasonable_box(JV jv)
         {
             return HandleJLErrorAndReturnNULL();
         }
-        
+
         int64_t N;
-        JLGetInt64(&N,jv_N, true);
+        JLGetInt64(&N, jv_N, true);
         JLFreeFromMe(jv_N);
         PyObject *argtuple = PyTuple_New(N);
 
-        for (int64_t i = 0; i < N; i++) 
+        for (int64_t i = 0; i < N; i++)
         {
             JV v;
-            ErrorCode ret1 = JLGetIndexI(&v,jv,i+1);
+            ErrorCode ret1 = JLGetIndexI(&v, jv, i + 1);
             if (ret1 != ErrorCode::ok)
             {
-            return HandleJLErrorAndReturnNULL();
+                return HandleJLErrorAndReturnNULL();
             }
             PyObject *arg = reasonable_box(v);
             if (!PyObject_IsInstance(arg, MyPyAPI.t_JV))
             {
                 JLFreeFromMe(v);
             }
-            Py_INCREF(arg);
+            // Py_INCREF(arg);
             PyTuple_SetItem(argtuple, i, arg);
         }
         return argtuple;

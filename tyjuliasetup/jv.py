@@ -48,12 +48,15 @@ class JV:
 
     def __setattr__(self, name: str, value: typing.Any):
         return __jl_setattr__(self, name, value)
+    
+    def __hasattr__(self, name: str):
+        return __jl_hasattr__(self, name)
 
     def __getitem__(self, key: typing.Any):
         return __jl_getitem__(self, key)
 
-    # def __setitem__(self, key: typing.Any, value: typing.Any):
-    #     return __jl_setitem__(self, key, value)
+    def __setitem__(self, key: typing.Any, value: typing.Any):
+        return __jl_setitem__(self, key, value)
 
     def __add__(self, other: typing.Any):
         return __jl_add__(self, other)

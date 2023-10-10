@@ -108,9 +108,12 @@ struct t_JLAPI
     JV obj_nothing;
     JV obj_JNumPySupportedNumPyArrayBoxingElementTypes;
     JV obj_zero;
+    JV obj_Base;
+    JV obj_Main;
 };
 
 typedef ErrorCode (*t_pycast2jl)(/* out */ JV *out, JV T, PyObject *py);
+// return New Reference if succ, NULL on fail
 typedef PyObject *(*t_pycast2py)(JV jv);
 static t_pycast2jl pycast2jl = NULL;
 static t_pycast2py pycast2py = NULL;
@@ -189,6 +192,8 @@ static void init_JLAPI()
     JLEval(&MyJLAPI.obj_false, NULL, "false");
     JLEval(&MyJLAPI.obj_nothing, NULL, "nothing");
     JLEval(&MyJLAPI.obj_zero, NULL, "0");
+    JLEval(&MyJLAPI.obj_Base, NULL, "Base");
+    JLEval(&MyJLAPI.obj_Main, NULL, "Main");
     JLEval(&MyJLAPI.obj_JNumPySupportedNumPyArrayBoxingElementTypes, NULL, "Union{Int8, Int16, Int32, Int64, UInt8, UInt16, UInt32, UInt64, Float16, Float32, Float64, ComplexF16, ComplexF32, ComplexF64, Bool}");
 }
 

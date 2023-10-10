@@ -15,8 +15,7 @@ function pycast2jl(out::Ptr{TyJuliaCAPI.JV}, T::Int64, p::Ptr{Cvoid})
     try
         p = TyJuliaCAPI.JV_ALLOC(py_cast(t,py))
         unsafe_store!(out, p)
-    catch e
-        TyJuliaCAPI.produce_error!(e)
+    catch
         return TyJuliaCAPI.ERROR
     end
     return TyJuliaCAPI.OK
@@ -31,8 +30,7 @@ function pycast2py(v::TyJuliaCAPI.JV)
         TyPython.CPython.PyAPI.Py_IncRef(py)
         ptr = reinterpret(Ptr{TyPython.CPython.PyObject}, TyPython.CPython.unsafe_unwrap(py))
         return ptr
-    catch e
-        TyJuliaCAPI.produce_error!(e)
+    catch
         return reinterpret(Ptr{TyPython.CPython.PyObject}, C_NULL)
     end
 end

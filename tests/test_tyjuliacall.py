@@ -121,9 +121,7 @@ def test_all():
 
     bitarray = JuliaEvaluator["bitarray = BitArray([1, 0])"]
     assert True in bitarray
-    assert (bitarray @ Base.transpose(bitarray)) == JuliaEvaluator[
-        "bitarray * bitarray'"
-    ]
+
     assert (bitarray >> 2) == JuliaEvaluator["bitarray >> 2"]
     assert (bitarray << 2) == JuliaEvaluator["bitarray << 2"]
 

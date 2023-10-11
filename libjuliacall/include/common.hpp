@@ -35,6 +35,21 @@ PyObject *HandleJLErrorAndReturnNULL()
     return NULL;
 }
 
+void ClearJLError()
+{
+    int64_t msgSize;
+    while (ErrorCode::ok == JLError_FetchMsgSize(&msgSize))
+    {
+        char *errorBytes = new char[msgSize + 1]; // 动态分配足够大小的内存
+        errorBytes[msgSize] = '\0';
+
+        JLError_FetchMsgStr(&errorSym, SList_adapt(reinterpret_cast<uint8_t *>(errorBytes), msgSize + 1));
+
+        delete[] errorBytes; // 释放动态分配的内存
+    }
+    return;
+}
+
 struct t_PyAPI
 {
     PyObject *m_builtin;

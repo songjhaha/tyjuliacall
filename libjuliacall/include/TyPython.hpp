@@ -219,7 +219,7 @@ ErrorCode ToJLNothingFromPy(JV *out, PyObject *py)
 ErrorCode ToJLStrArrayFromPy(JV *out, PyObject *py)
 {
     // assum py is a python string array
-    PyObject *py_flatten = PyObject_CallMethod(py, "flatten", NULL);
+    PyObject *py_flatten = PyObject_CallMethod(py, "flatten", "s", "F");
     if (py_flatten == NULL)
         return ErrorCode::error;
 

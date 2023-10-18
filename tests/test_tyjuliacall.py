@@ -24,7 +24,7 @@ def test_all():
     assert JuliaEvaluator["x -> typeof(x) == Int"](1)
     assert JuliaEvaluator["x -> typeof(x) == Bool"](True)
     assert JuliaEvaluator["x -> typeof(x) <: AbstractArray"](np.ones((100, 100)))
-    assert JuliaEvaluator["x -> x isa Tuple{Int, String}"]((1, "2"))
+    assert JuliaEvaluator["x -> x isa Tuple{Int, String}"]((1, "2")) 
     assert JuliaEvaluator["x -> x isa Nothing"](None)
 
     # Vector{String} 没有对应Python类型
@@ -42,8 +42,6 @@ def test_all():
     x = JuliaEvaluator["ComplexF32[]"]
     assert isinstance(x, np.ndarray) and x.dtype == np.complex64
 
-    x = JuliaEvaluator["ComplexF32[]"]
-    assert isinstance(x, np.ndarray) and x.dtype == np.complex64
 
     x = JuliaEvaluator['(2, "2", (1.0, 2.0), ComplexF32[])']
     assert isinstance(x, tuple) and len(x) == 4
@@ -53,6 +51,17 @@ def test_all():
     assert isinstance(x[2][0], float) and x[2][0] == 1.0
     assert isinstance(x[2][1], float) and x[2][1] == 2.0
     assert isinstance(x[3], np.ndarray) and x[3].dtype == np.complex64
+
+    x = JuliaEvaluator['(3, "hello", (1.5, 2.5), ComplexF64[])']
+
+    # 使用 assert 语句来比较结果
+    assert isinstance(x, tuple) and len(x) == 4
+    assert isinstance(x[0], int) and x[0] == 3
+    assert isinstance(x[1], str) and x[1] == "hello"
+    assert isinstance(x[2], tuple) and len(x[2]) == 2
+    assert isinstance(x[2][0], float) and x[2][0] == 1.5
+    assert isinstance(x[2][1], float) and x[2][1] == 2.5
+    assert isinstance(x[3], np.ndarray) and x[3].dtype == np.complex128
 
     s1 = JuliaEvaluator[
         r"""
@@ -80,11 +89,29 @@ def test_all():
     s2.y = 10
     assert JuliaEvaluator["s2.y == 10"]
 
+    s3 = JuliaEvaluator[
+        r"""
+        mutable struct S3
+            a::Float64
+            b::String
+            c::Bool
+        end
+        """,
+        's3 = S3(3.14, "hello", true)',
+    ]
+
+    assert isinstance(s3, JV) and  s3.a == 3.14 and  s3.b == "hello" and  s3.c is True
+    s3.a = 2.71
+    assert JuliaEvaluator["s3.a == 2.71"]
+
     # 不支持传入规定以外的参数
     try:
         Base.identity([])
     except Exception as e:
         pass
+
+    x = JuliaEvaluator["x -> x^2"](5)
+    assert x == 25
 
     _r = repr(JuliaEvaluator['String["1"]'])
     assert str.startswith(_r, "<JV(")
@@ -99,6 +126,12 @@ def test_all():
     jdict[1, 2] = 3
     assert jdict[1, 2] == 3
     assert Base.haskey(jdict, (1, 2))
+
+    jdict = Base.Dict()
+    jdict["one", "two"] = 1
+    jdict["three", "four"] = 2
+    assert jdict["one", "two"] == 1
+    assert Base.haskey(jdict, ("three", "four"))
 
     pi = JuliaEvaluator["pi"]
     assert pi + 1 == JuliaEvaluator["pi + 1"]
@@ -119,6 +152,25 @@ def test_all():
     assert (hash(pi)) == JuliaEvaluator["hash(pi) % Int64"]
     assert (+(pi)) == JuliaEvaluator["+(pi)"]
 
+    # 获取 Julia 的黄金比例 "φ"（phi）
+    phi = JuliaEvaluator["(1 + sqrt(5)) / 2"]
+    assert phi + 1 == JuliaEvaluator["(1 + sqrt(5)) / 2 + 1"]
+    assert phi - 1 == JuliaEvaluator["(1 + sqrt(5)) / 2 - 1"]
+    assert phi * 5 == JuliaEvaluator["(1 + sqrt(5)) / 2 * 5"]
+    assert phi / 2 == JuliaEvaluator["(1 + sqrt(5)) / 2 / 2"]
+    assert phi // 2 == JuliaEvaluator["div((1 + sqrt(5)) / 2, 2)"]
+    assert (phi > 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 > 2"]
+    assert (phi >= 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 >= 2"]
+    assert (phi < 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 < 2"]
+    assert (phi <= 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 <= 2"]
+    assert (phi == 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 == 2"]
+    assert (phi != 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 != 2"]
+    assert (phi**2) == JuliaEvaluator["((1 + sqrt(5)) / 2)^2"]
+    assert (phi % 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 % 2"]
+    assert abs(phi) == JuliaEvaluator["abs((1 + sqrt(5)) / 2)"]
+    assert -(phi) == JuliaEvaluator["-(1 + sqrt(5)) / 2"]
+    assert +(phi) == JuliaEvaluator["+(1 + sqrt(5)) / 2"]
+
     bitarray = JuliaEvaluator["bitarray = BitArray([1, 0])"]
     assert True in bitarray
 
@@ -130,6 +182,7 @@ def test_all():
     assert (missing & 2) == JuliaEvaluator["missing & 2"]
     assert (missing ^ 2) == JuliaEvaluator["missing  ⊻ 2"]
     assert (~missing) == JuliaEvaluator["~missing"]
+
 
     # test miscellaneous
     from tyjuliasetup import Environment

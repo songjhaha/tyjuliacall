@@ -90,10 +90,12 @@ ErrorCode ToJListFromPyTuple(JV *out_list, bool8_t *jv_tobefree, PyObject *py, P
     for (Py_ssize_t i = 0; i < length; i++)
     {
         PyObject *element = PyTuple_GetItem(py, i);
+        Py_IncRef(element);
         if (element == NULL)
             return ErrorCode::error;
         // 将解包后的元素添加到列表
         JV unbox_element = reasonable_unbox(element, ptr_tobefree);
+        Py_DecRef(element);
         if (unbox_element == JV_NULL)
         {
             return ErrorCode::error;
@@ -133,6 +135,7 @@ ErrorCode ToJLSymFromPyStr(JSym *out, PyObject *py)
 
     char *str = PyBytes_AsString(pybytes);
     JSymFromString(out, SList_adapt(reinterpret_cast<uint8_t *>(str), strlen(str)));
+    Py_DECREF(pybytes);
     return ErrorCode::ok;
 }
 
@@ -198,6 +201,7 @@ ErrorCode ToJLStringFromPy(JV *out, PyObject *py)
 
     char *str = PyBytes_AsString(pybytes);
     ToJLString(out, SList_adapt(reinterpret_cast<uint8_t *>(str), strlen(str)));
+    Py_DECREF(pybytes);
     return ErrorCode::ok;
 }
 
@@ -210,6 +214,62 @@ ErrorCode ToJLNothingFromPy(JV *out, PyObject *py)
         *out = MyJLAPI.obj_nothing;
         return ErrorCode::ok;
     }
+}
+
+ErrorCode ToJLStrArrayFromPy(JV *out, PyObject *py)
+{
+    // assum py is a python string array
+    PyObject *py_flatten = PyObject_CallMethod(py, "flatten", NULL);
+    if (py_flatten == NULL)
+        return ErrorCode::error;
+
+    Py_ssize_t len = PyObject_Length(py_flatten);
+    JV strArry;
+    JLNew_StringVector(&strArry, len);
+    for (Py_ssize_t i = 0; i < len; i++)
+    {
+        PyObject *ind = PyLong_FromSsize_t(i);
+        PyObject *element = PyObject_GetItem(py_flatten, ind);
+        Py_IncRef(element);
+        if (element == NULL)
+        {
+            JLFreeFromMe(strArry);
+            Py_DecRef(element);
+            Py_DecRef(ind);
+            Py_DecRef(py_flatten);
+
+            return ErrorCode::error;
+        }
+        JV str;
+        if (ErrorCode::ok == ToJLStringFromPy(&str, element))
+        {
+            JLSetIndexI(strArry, i + 1, str);
+        }
+        else
+        {
+            JLFreeFromMe(strArry);
+            Py_DecRef(element);
+            Py_DecRef(ind);
+            Py_DecRef(py_flatten);
+            return ErrorCode::error;
+        }
+        Py_DecRef(element);
+        Py_DecRef(ind);
+    }
+
+    Py_DecRef(py_flatten);
+
+    // reshape
+    PyObject *shape = PyObject_GetAttrString(py, "shape");
+    bool8_t needToBeFree = false;
+    JV jv_shape = reasonable_unbox(shape, &needToBeFree);
+    JV jv_arg[2] = {strArry, jv_shape};
+
+    ErrorCode ret = JLCall(out, MyJLAPI.f_reshape, SList_adapt(jv_arg, 2), emptyKwArgs());
+    JLFreeFromMe(jv_shape);
+    JLFreeFromMe(strArry);
+    Py_DecRef(shape);
+    return ret;
 }
 
 JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree)
@@ -266,8 +326,30 @@ JV reasonable_unbox(PyObject *py, bool8_t *needToBeFree)
         }
         else
         {
-            // TODO(sjh): string array
-            return out;
+            // string array
+            PyObject *dt = PyObject_GetAttrString(py, "dtype");
+            PyObject *dtname = PyObject_GetAttrString(dt, "name");
+            PyObject *isstr = PyObject_CallMethod(dtname, "startswith", "s", "str");
+            if (PyObject_IsTrue(isstr))
+            {
+                Py_DecRef(isstr);
+                Py_DecRef(dtname);
+                Py_DecRef(dt);
+                if (ErrorCode::ok == ToJLStrArrayFromPy(&out, py))
+                {
+                    return out;
+                }
+                else
+                {
+                    ClearJLError();
+                }
+            }
+            else
+            {
+                Py_DecRef(isstr);
+                Py_DecRef(dtname);
+                Py_DecRef(dt);
+            }
         }
     }
 
@@ -377,13 +459,13 @@ PyObject *reasonable_box(JV jv)
             {
                 return HandleJLErrorAndReturnNULL();
             }
+            // reasonable_box should always return a new reference
             PyObject *arg = reasonable_box(v);
+
             if (!PyCheck_Type_Exact(arg, MyPyAPI.t_JV))
             {
                 JLFreeFromMe(v);
             }
-            // reasonable_box should always return a new reference
-            // Py_INCREF(arg);
             PyTuple_SetItem(argtuple, i, arg);
         }
         return argtuple;

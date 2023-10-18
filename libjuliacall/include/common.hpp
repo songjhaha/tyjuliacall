@@ -119,6 +119,7 @@ struct t_JLAPI
     JV f_setindex;
     JV f_tuple;
     JV f_convert;
+    JV f_reshape;
 
     JV obj_true;
     JV obj_false;
@@ -134,8 +135,10 @@ struct t_JLAPI
 typedef ErrorCode (*t_pycast2jl)(/* out */ JV *out, JV T, PyObject *py);
 // return New Reference if succ, NULL on fail
 typedef PyObject *(*t_pycast2py)(JV jv);
+typedef PyObject *(*t_jlreprpretty)(JV jv);
 static t_pycast2jl pycast2jl = NULL;
 static t_pycast2py pycast2py = NULL;
+static t_jlreprpretty jlreprpretty = NULL;
 static const JV JV_NULL = 0;
 
 static t_PyAPI MyPyAPI;
@@ -208,6 +211,7 @@ static void init_JLAPI()
     JLEval(&MyJLAPI.f_tuple, NULL, "Base.tuple");
     JLEval(&MyJLAPI.f_length, NULL, "Base.length");
     JLEval(&MyJLAPI.f_convert, NULL, "Base.convert");
+    JLEval(&MyJLAPI.f_reshape, NULL, "Base.reshape");
 
     JLEval(&MyJLAPI.obj_true, NULL, "true");
     JLEval(&MyJLAPI.obj_false, NULL, "false");

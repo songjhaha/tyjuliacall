@@ -9,9 +9,10 @@
 
 DLLEXPORT int init_libjuliacall(void *lpfnJLCApiGetter,
                                 void *lpfnPyCast2JL,
-                                void *lpfnPyCast2Py)
+                                void *lpfnPyCast2Py,
+                                void *lpfnJLReprPretty)
 {
-  if (pycast2jl != NULL && pycast2py != NULL)
+  if (pycast2jl != NULL && pycast2py != NULL && jlreprpretty != NULL)
   {
     return 0;
   }
@@ -24,6 +25,7 @@ DLLEXPORT int init_libjuliacall(void *lpfnJLCApiGetter,
 
   pycast2jl = (t_pycast2jl)lpfnPyCast2JL;
   pycast2py = (t_pycast2py)lpfnPyCast2Py;
+  jlreprpretty = (t_jlreprpretty)lpfnJLReprPretty;
 
   return 0;
 }
@@ -82,6 +84,24 @@ static PyObject *jl_display(PyObject *self, PyObject *arg)
   // free this Julia String
   JLFreeFromMe(jret);
   return pyjv;
+}
+
+static PyObject *jl_repr_pretty(PyObject *self, PyObject *arg)
+{
+  if (!PyCheck_Type_Exact(arg, MyPyAPI.t_JV))
+  {
+    PyErr_SetString(JuliaCallError, "jl_display: expect object of JV class.");
+    return NULL;
+  }
+
+  // unbox jv from arg (use unbox_julia)
+  JV jv = unbox_julia(arg);
+  PyObject *res = jlreprpretty(jv);
+  if (res == NULL)
+  {
+    PyErr_SetString(JuliaCallError, "jl_repr_pretty: failed to show JV as Python's str.");
+  }
+  return res;
 }
 
 static PyObject *jl_call(PyObject *self, PyObject *args)
@@ -196,7 +216,6 @@ static PyObject *jl_getattr(PyObject *self, PyObject *args)
   {
     return NULL;
   }
-
   JV slf;
   if (!PyCheck_Type_Exact(pyjv, MyPyAPI.t_JV))
   {
@@ -839,6 +858,7 @@ static PyObject *jl_hash(PyObject *self, PyObject *arg)
 static PyMethodDef jl_methods[] = {
     {"__jl_invoke__", jl_call, METH_VARARGS, "call JV as callable object"},
     {"__jl_repr__", jl_display, METH_O, "display JV as string"},
+    {"_jl_repr_pretty_", jl_repr_pretty, METH_O, "display JV as string"},
     {"__jl_getattr__", jl_getattr, METH_VARARGS, "get attr of JV object"},
     {"__jl_setattr__", jl_setattr, METH_VARARGS, "set attr of JV object"},
     {"__jl_hasattr__", jl_hasattr, METH_VARARGS, "has attr of JV object"},
@@ -898,6 +918,8 @@ static PyObject *setup_basics(PyObject *self, PyObject *m_tyjuliacall_jnumpy)
 {
   PyObject *j_Base = reasonable_box(MyJLAPI.obj_Base);
   PyObject *j_Main = reasonable_box(MyJLAPI.obj_Main);
+  Py_IncRef(j_Base);
+  Py_IncRef(j_Main);
   PyModule_AddObject(m_tyjuliacall_jnumpy, "Base", j_Base);
   PyModule_AddObject(m_tyjuliacall_jnumpy, "Main", j_Main);
 

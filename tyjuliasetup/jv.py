@@ -136,8 +136,8 @@ class JV:
     def __repr__(self):
         return f"<JV({__jl_repr__(self)}) at {hex(id(self))}>"
 
-    # def _repr_pretty_(self, p, cycle):
-    #     p.text(_jl_repr_pretty_(self) if not cycle else "...")
+    def _repr_pretty_(self, p, cycle):
+        p.text(_jl_repr_pretty_(self) if not cycle else "...")
 
     def __iter__(self):
         global _jl_iterate

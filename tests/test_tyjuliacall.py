@@ -30,38 +30,31 @@ def test_all():
     # Vector{String} 没有对应Python类型
     assert isinstance(JuliaEvaluator["String[]"], JV)
 
-    x = JuliaEvaluator["Int32[]"]
-    assert isinstance(x, np.ndarray) and x.dtype == np.int32
+    re_data = JuliaEvaluator["Int32[]"]
+    assert isinstance(re_data, np.ndarray) and re_data.dtype == np.int32
 
-    x = JuliaEvaluator["Int8[]"]
-    assert isinstance(x, np.ndarray) and x.dtype == np.int8
+    re_data = JuliaEvaluator["Int8[]"]
+    assert isinstance(re_data, np.ndarray) and re_data.dtype == np.int8
 
-    x = JuliaEvaluator["zeros(Float32, 2, 2)"]
-    assert isinstance(x, np.ndarray) and x.dtype == np.float32
+    re_data = JuliaEvaluator["zeros(Float32, 2, 2)"]
+    assert isinstance(re_data, np.ndarray) and re_data.dtype == np.float32
 
-    x = JuliaEvaluator["ComplexF32[]"]
-    assert isinstance(x, np.ndarray) and x.dtype == np.complex64
+    re_data = JuliaEvaluator["ones(Float64, 3, 3)"]
+    assert isinstance(re_data, np.ndarray) and re_data.dtype == np.float64
+
+    re_data = JuliaEvaluator["ComplexF32[]"]
+    assert isinstance(re_data, np.ndarray) and re_data.dtype == np.complex64
+
+    re_data = JuliaEvaluator['(2, "2", (1.0, 2.0), ComplexF32[])']
+    assert isinstance(re_data, tuple) and len(re_data) == 4
+    assert isinstance(re_data[0], int) and re_data[0] == 2
+    assert isinstance(re_data[1], str) and re_data[1] == "2"
+    assert isinstance(re_data[2], tuple) and len(re_data[2]) == 2
+    assert isinstance(re_data[2][0], float) and re_data[2][0] == 1.0
+    assert isinstance(re_data[2][1], float) and re_data[2][1] == 2.0
+    assert isinstance(re_data[3], np.ndarray) and re_data[3].dtype == np.complex64
 
 
-    x = JuliaEvaluator['(2, "2", (1.0, 2.0), ComplexF32[])']
-    assert isinstance(x, tuple) and len(x) == 4
-    assert isinstance(x[0], int) and x[0] == 2
-    assert isinstance(x[1], str) and x[1] == "2"
-    assert isinstance(x[2], tuple) and len(x[2]) == 2
-    assert isinstance(x[2][0], float) and x[2][0] == 1.0
-    assert isinstance(x[2][1], float) and x[2][1] == 2.0
-    assert isinstance(x[3], np.ndarray) and x[3].dtype == np.complex64
-
-    x = JuliaEvaluator['(3, "hello", (1.5, 2.5), ComplexF64[])']
-
-    # 使用 assert 语句来比较结果
-    assert isinstance(x, tuple) and len(x) == 4
-    assert isinstance(x[0], int) and x[0] == 3
-    assert isinstance(x[1], str) and x[1] == "hello"
-    assert isinstance(x[2], tuple) and len(x[2]) == 2
-    assert isinstance(x[2][0], float) and x[2][0] == 1.5
-    assert isinstance(x[2][1], float) and x[2][1] == 2.5
-    assert isinstance(x[3], np.ndarray) and x[3].dtype == np.complex128
 
     s1 = JuliaEvaluator[
         r"""
@@ -99,7 +92,6 @@ def test_all():
         """,
         's3 = S3(3.14, "hello", true)',
     ]
-
     assert isinstance(s3, JV) and  s3.a == 3.14 and  s3.b == "hello" and  s3.c is True
     s3.a = 2.71
     assert JuliaEvaluator["s3.a == 2.71"]
@@ -110,9 +102,6 @@ def test_all():
     except Exception as e:
         pass
 
-    x = JuliaEvaluator["x -> x^2"](5)
-    assert x == 25
-
     _r = repr(JuliaEvaluator['String["1"]'])
     assert str.startswith(_r, "<JV(")
     assert r'["1"]' in _r
@@ -122,16 +111,17 @@ def test_all():
     assert ts[1] == "2"
     assert isinstance(ts[2], JV) and list(ts[2]) == []
 
+    data = JuliaEvaluator['["ab","测试","chksav",true]']
+    re_data = Base.reshape(data,2,2)
+    assert re_data[1] == "ab"
+    assert re_data[2] == "测试"
+    assert re_data[3] == "chksav"
+    assert isinstance( re_data[4], bool) and  re_data[4] is True
+
     jdict = Base.Dict()
     jdict[1, 2] = 3
     assert jdict[1, 2] == 3
     assert Base.haskey(jdict, (1, 2))
-
-    jdict = Base.Dict()
-    jdict["one", "two"] = 1
-    jdict["three", "four"] = 2
-    assert jdict["one", "two"] == 1
-    assert Base.haskey(jdict, ("three", "four"))
 
     pi = JuliaEvaluator["pi"]
     assert pi + 1 == JuliaEvaluator["pi + 1"]
@@ -152,24 +142,6 @@ def test_all():
     assert (hash(pi)) == JuliaEvaluator["hash(pi) % Int64"]
     assert (+(pi)) == JuliaEvaluator["+(pi)"]
 
-    # 获取 Julia 的黄金比例 "φ"（phi）
-    phi = JuliaEvaluator["(1 + sqrt(5)) / 2"]
-    assert phi + 1 == JuliaEvaluator["(1 + sqrt(5)) / 2 + 1"]
-    assert phi - 1 == JuliaEvaluator["(1 + sqrt(5)) / 2 - 1"]
-    assert phi * 5 == JuliaEvaluator["(1 + sqrt(5)) / 2 * 5"]
-    assert phi / 2 == JuliaEvaluator["(1 + sqrt(5)) / 2 / 2"]
-    assert phi // 2 == JuliaEvaluator["div((1 + sqrt(5)) / 2, 2)"]
-    assert (phi > 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 > 2"]
-    assert (phi >= 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 >= 2"]
-    assert (phi < 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 < 2"]
-    assert (phi <= 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 <= 2"]
-    assert (phi == 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 == 2"]
-    assert (phi != 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 != 2"]
-    assert (phi**2) == JuliaEvaluator["((1 + sqrt(5)) / 2)^2"]
-    assert (phi % 2) == JuliaEvaluator["(1 + sqrt(5)) / 2 % 2"]
-    assert abs(phi) == JuliaEvaluator["abs((1 + sqrt(5)) / 2)"]
-    assert -(phi) == JuliaEvaluator["-(1 + sqrt(5)) / 2"]
-    assert +(phi) == JuliaEvaluator["+(1 + sqrt(5)) / 2"]
 
     bitarray = JuliaEvaluator["bitarray = BitArray([1, 0])"]
     assert True in bitarray

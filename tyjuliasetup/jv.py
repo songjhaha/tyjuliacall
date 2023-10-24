@@ -4,6 +4,7 @@ import typing
 __jl_invoke__: typing.Callable[[JV, tuple, dict], typing.Any]
 __jl_getattr__: typing.Callable[[JV, str], typing.Any]
 __jl_setattr__: typing.Callable[[JV, str, typing.Any], typing.Any]
+__jl_hasattr__: typing.Callable[[JV, str], typing.Any]
 __jl_getitem__: typing.Callable[[JV, typing.Any], typing.Any]
 __jl_setitem__: typing.Callable[[JV, typing.Any, typing.Any], typing.Any]
 __jl_add__: typing.Callable[[JV, typing.Any], typing.Any]
@@ -133,7 +134,7 @@ class JV:
         return __jl_hash__(self)
 
     def __repr__(self):
-        return __jl_repr__(self)
+        return f"<JV({__jl_repr__(self)}) at {hex(id(self))}>"
 
     def _repr_pretty_(self, p, cycle):
         p.text(_jl_repr_pretty_(self) if not cycle else "...")

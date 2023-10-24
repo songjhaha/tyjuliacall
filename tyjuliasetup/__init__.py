@@ -121,6 +121,11 @@ def _load_pyjulia_core() -> ModuleType:
     elif pyjulia_core_provider == "jnumpy":
         import _tyjuliacall_jnumpy  # type: ignore
 
+        # temporary workaround, will be removed after TyJuliaCAPI update
+        from _tyjuliacall_jnumpy import Base, Main # type: ignore
+        def jl_eval(command: str):
+            return Base.eval(Main, Base.Meta.parseall(command))
+        _tyjuliacall_jnumpy.evaluate = jl_eval # type: ignore
         return _tyjuliacall_jnumpy
     else:
         raise EnvironmentError(
@@ -157,7 +162,11 @@ class JuliaModule(ModuleType):
         self.__spec__ = None
 
     def __getattr__(self, name):
-        return getattr(self.__it, name)
+        try:
+            att = getattr(self.__it, name)
+        except:
+            raise AttributeError(f"{self.__it} has no attribute {name}.") from None
+        return att
 
     def __dir__(self):
         return list(self._jlapi.Main.names(self.__it, all=True, imported=True))
@@ -191,7 +200,7 @@ class JuliaLoader:
 def _jl_using(fullnames: tuple[str, ...]):
     pyjulia_core = _load_pyjulia_core()
     evaluate = pyjulia_core.evaluate
-    Main = pyjulia_core.Main
+    Main = evaluate("Main")
 
     M = evaluate("import {0};{0}".format(fullnames[0]))
     for submodulename in fullnames[1:]:
@@ -243,6 +252,15 @@ class _JuliaCodeEvaluatorClass:
 
 JuliaEvaluator = _JuliaCodeEvaluatorClass()
 
+def _exec_julia(x):
+    global _eval_jl
+    try:
+        _eval_jl(x)  # type: ignore
+    except NameError:
+        raise RuntimeError(
+            "name '_eval_jl' is not defined, should call tyjuliasetup.setup() first."
+        )
+
 
 def _exec_julia(x):
     global _eval_jl
@@ -258,6 +276,7 @@ begin
     {}
 end
 """
+
 
 def get_sysimage_and_projdir(jl_exe: str):
     if Environment.TYPY_JL_SYSIMAGE:
@@ -347,13 +366,13 @@ def setup():
     pyjulia_core_provider = _get_pyjulia_core_provider()
     with tictoc("PyJulia-Core initialized in {} seconds"):
         if pyjulia_core_provider == "jnumpy":
-            # import TyPython and init CPython in julia global env
-            try:
-                _exec_julia("import TyPython")
-            except JuliaError:
-                raise JuliaError("Failed to import Julia package TyPython, try to install TyPython in Julia.") from None
 
-            _exec_julia("TyPython.CPython.init()")
+            # import TyPython and TyJuliaCAPI in julia global env
+            try:
+                _exec_julia("import TyPython, TyJuliaCAPI")
+            except JuliaError:
+                raise JuliaError("Failed to import Julia package TyPython and TyJuliaCAPI, try to install TyPython and TyJuliaCAPI in Julia.") from None
+
 
             # init TyJuliaSetup
             try:
@@ -371,9 +390,10 @@ def setup():
             import _tyjuliacall_jnumpy  # type: ignore
             from tyjuliasetup import jv
 
-            _tyjuliacall_jnumpy.setup_jv(jv.JV, jv)
-            _tyjuliacall_jnumpy.setup_basics(_tyjuliacall_jnumpy)
-            _tyjuliacall_jnumpy.JV = jv.JV
+            with tictoc("setup_jv in {} seconds"):
+                _tyjuliacall_jnumpy.setup_api(jv.JV, jv)
+                _tyjuliacall_jnumpy.setup_basics(_tyjuliacall_jnumpy)
+                _tyjuliacall_jnumpy.JV = jv.JV
         elif pyjulia_core_provider == "pycall":
             lib.jl_eval_string("import PyCall".encode("utf-8"))
             lib.jl_eval_string("Pkg.activate(io=devnull)".encode("utf-8"))

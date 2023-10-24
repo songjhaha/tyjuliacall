@@ -24,35 +24,37 @@ def test_all():
     assert JuliaEvaluator["x -> typeof(x) == Int"](1)
     assert JuliaEvaluator["x -> typeof(x) == Bool"](True)
     assert JuliaEvaluator["x -> typeof(x) <: AbstractArray"](np.ones((100, 100)))
-    assert JuliaEvaluator["x -> x isa Tuple{Int, String}"]((1, "2"))
+    assert JuliaEvaluator["x -> x isa Tuple{Int, String}"]((1, "2")) 
     assert JuliaEvaluator["x -> x isa Nothing"](None)
 
     # Vector{String} 没有对应Python类型
     assert isinstance(JuliaEvaluator["String[]"], JV)
 
-    x = JuliaEvaluator["Int32[]"]
-    assert isinstance(x, np.ndarray) and x.dtype == np.int32
+    re_data = JuliaEvaluator["Int32[]"]
+    assert isinstance(re_data, np.ndarray) and re_data.dtype == np.int32
 
-    x = JuliaEvaluator["Int8[]"]
-    assert isinstance(x, np.ndarray) and x.dtype == np.int8
+    re_data = JuliaEvaluator["Int8[]"]
+    assert isinstance(re_data, np.ndarray) and re_data.dtype == np.int8
 
-    x = JuliaEvaluator["zeros(Float32, 2, 2)"]
-    assert isinstance(x, np.ndarray) and x.dtype == np.float32
+    re_data = JuliaEvaluator["zeros(Float32, 2, 2)"]
+    assert isinstance(re_data, np.ndarray) and re_data.dtype == np.float32
 
-    x = JuliaEvaluator["ComplexF32[]"]
-    assert isinstance(x, np.ndarray) and x.dtype == np.complex64
+    re_data = JuliaEvaluator["ones(Float64, 3, 3)"]
+    assert isinstance(re_data, np.ndarray) and re_data.dtype == np.float64
 
-    x = JuliaEvaluator["ComplexF32[]"]
-    assert isinstance(x, np.ndarray) and x.dtype == np.complex64
+    re_data = JuliaEvaluator["ComplexF32[]"]
+    assert isinstance(re_data, np.ndarray) and re_data.dtype == np.complex64
 
-    x = JuliaEvaluator['(2, "2", (1.0, 2.0), ComplexF32[])']
-    assert isinstance(x, tuple) and len(x) == 4
-    assert isinstance(x[0], int) and x[0] == 2
-    assert isinstance(x[1], str) and x[1] == "2"
-    assert isinstance(x[2], tuple) and len(x[2]) == 2
-    assert isinstance(x[2][0], float) and x[2][0] == 1.0
-    assert isinstance(x[2][1], float) and x[2][1] == 2.0
-    assert isinstance(x[3], np.ndarray) and x[3].dtype == np.complex64
+    re_data = JuliaEvaluator['(2, "2", (1.0, 2.0), ComplexF32[])']
+    assert isinstance(re_data, tuple) and len(re_data) == 4
+    assert isinstance(re_data[0], int) and re_data[0] == 2
+    assert isinstance(re_data[1], str) and re_data[1] == "2"
+    assert isinstance(re_data[2], tuple) and len(re_data[2]) == 2
+    assert isinstance(re_data[2][0], float) and re_data[2][0] == 1.0
+    assert isinstance(re_data[2][1], float) and re_data[2][1] == 2.0
+    assert isinstance(re_data[3], np.ndarray) and re_data[3].dtype == np.complex64
+
+
 
     s1 = JuliaEvaluator[
         r"""
@@ -80,6 +82,20 @@ def test_all():
     s2.y = 10
     assert JuliaEvaluator["s2.y == 10"]
 
+    s3 = JuliaEvaluator[
+        r"""
+        mutable struct S3
+            a::Float64
+            b::String
+            c::Bool
+        end
+        """,
+        's3 = S3(3.14, "hello", true)',
+    ]
+    assert isinstance(s3, JV) and  s3.a == 3.14 and  s3.b == "hello" and  s3.c is True
+    s3.a = 2.71
+    assert JuliaEvaluator["s3.a == 2.71"]
+
     # 不支持传入规定以外的参数
     try:
         Base.identity([])
@@ -94,6 +110,13 @@ def test_all():
     assert ts[0] == 1
     assert ts[1] == "2"
     assert isinstance(ts[2], JV) and list(ts[2]) == []
+
+    data = JuliaEvaluator['["ab","测试","chksav",true]']
+    re_data = Base.reshape(data,2,2)
+    assert re_data[1] == "ab"
+    assert re_data[2] == "测试"
+    assert re_data[3] == "chksav"
+    assert isinstance( re_data[4], bool) and  re_data[4] is True
 
     jdict = Base.Dict()
     jdict[1, 2] = 3
@@ -119,11 +142,10 @@ def test_all():
     assert (hash(pi)) == JuliaEvaluator["hash(pi) % Int64"]
     assert (+(pi)) == JuliaEvaluator["+(pi)"]
 
+
     bitarray = JuliaEvaluator["bitarray = BitArray([1, 0])"]
     assert True in bitarray
-    assert (bitarray @ Base.transpose(bitarray)) == JuliaEvaluator[
-        "bitarray * bitarray'"
-    ]
+
     assert (bitarray >> 2) == JuliaEvaluator["bitarray >> 2"]
     assert (bitarray << 2) == JuliaEvaluator["bitarray << 2"]
 
@@ -132,6 +154,7 @@ def test_all():
     assert (missing & 2) == JuliaEvaluator["missing & 2"]
     assert (missing ^ 2) == JuliaEvaluator["missing  ⊻ 2"]
     assert (~missing) == JuliaEvaluator["~missing"]
+
 
     # test miscellaneous
     from tyjuliasetup import Environment

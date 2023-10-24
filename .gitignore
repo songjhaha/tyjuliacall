@@ -6,7 +6,8 @@ __pycache__/
 *$py.class
 *.dll
 tyjuliasetup/Manifest.toml
-.vscode/
+
+.vscode
 
 # C extensions
 *.so

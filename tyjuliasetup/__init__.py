@@ -261,11 +261,22 @@ def _exec_julia(x):
             "name '_eval_jl' is not defined, should call tyjuliasetup.setup() first."
         )
 
+
+def _exec_julia(x):
+    global _eval_jl
+    try:
+        _eval_jl(x)  # type: ignore
+    except NameError:
+        raise RuntimeError(
+            "name '_eval_jl' is not defined, should call tyjuliasetup.setup() first."
+        )
+
 code_template = r"""
 begin
     {}
 end
 """
+
 
 def get_sysimage_and_projdir(jl_exe: str):
     if Environment.TYPY_JL_SYSIMAGE:
@@ -355,11 +366,13 @@ def setup():
     pyjulia_core_provider = _get_pyjulia_core_provider()
     with tictoc("PyJulia-Core initialized in {} seconds"):
         if pyjulia_core_provider == "jnumpy":
+
             # import TyPython and TyJuliaCAPI in julia global env
             try:
                 _exec_julia("import TyPython, TyJuliaCAPI")
             except JuliaError:
                 raise JuliaError("Failed to import Julia package TyPython and TyJuliaCAPI, try to install TyPython and TyJuliaCAPI in Julia.") from None
+
 
             # init TyJuliaSetup
             try:

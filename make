@@ -94,8 +94,8 @@ def call_library_build(platform: Platform, arch: Architecure):
 
 
         script_dir = os.path.dirname(__file__)  # 获取脚本所在的目录
-        source_code_path = os.path.join(script_dir, "library.cpp")  # 计算源代码文件的路径
-        include_path = os.path.join(script_dir, "tyjuliacall/libjuliacall/include")  # 计算 include 文件夹的路径
+        source_code_path = os.path.join(script_dir, "libjuliacall/juliacall.cpp")  # 计算源代码文件的路径
+        include_path = os.path.join(script_dir, "libjuliacall/include")  # 计算 include 文件夹的路径
 
         code = call([
             zig, 'c++', '-target', compute_zig_target(platform, arch),
